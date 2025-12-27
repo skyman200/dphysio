@@ -75,6 +75,6 @@ jobs:
             ### Windows
             1. MSI 또는 EXE 파일 다운로드
             2. 설치 프로그램 실행
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
