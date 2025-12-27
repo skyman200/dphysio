@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEvents } from "@/hooks/useEvents";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { EventDetailModal } from "@/components/calendar/EventDetailModal";
+import { AppleDateTimePicker } from "@/components/ui/AppleDateTimePicker";
+import { EventList } from "@/components/calendar/EventList";
+import { CalendarViewToggle, ViewType } from "@/components/calendar/CalendarViewToggle";
 
 import { EVENT_CATEGORIES } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type ViewMode = "month" | "week" | "day";
 
 import { getUserColor, getUserEventStyle, getUserChipStyle, getUserAvatarStyle } from "@/lib/colors";
+import { TransformedEvent } from "@/types";
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8am to 7pm
 
@@ -35,6 +39,8 @@ const ProfessorCalendarPage = () => {
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [presentationMode, setPresentationMode] = useState<ViewType>("detailed");
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedProfessors, setSelectedProfessors] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -44,14 +50,20 @@ const ProfessorCalendarPage = () => {
   const [newEvent, setNewEvent] = useState({
     title: "",
     date: "",
-    time: "",
-    endTime: "",
+    time: "09:00",
+    endDate: "",
+    endTime: "10:00",
     location: "",
     category: "meeting", // Default
+    isAllDay: false,
   });
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  useEffect(() => {
+    setSelectedDate(currentDate);
+  }, [currentDate]);
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) =>
@@ -83,12 +95,27 @@ const ProfessorCalendarPage = () => {
     }
     return events.filter((e) => {
       // Exclude department events
-      // @ts-ignore - 'type' might not be strictly typed on raw Event interface yet but exists in Firestore
+      // @ts-ignore
       if (e.type === 'department') return false;
-
       return selectedProfessors.includes(e.created_by);
     });
   }, [events, selectedProfessors]);
+
+  // Selected Date Events for List View
+  const selectedDateEvents = useMemo(() => {
+    return selectedEvents.filter((event) => {
+      const start = new Date(event.start_date);
+      const end = new Date(event.end_date);
+      const target = selectedDate;
+
+      // Check overlap
+      const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      const t = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+
+      return t >= s && t <= e;
+    }) as TransformedEvent[]; // Cast as generic TransformedEvent compatible
+  }, [selectedEvents, selectedDate]);
 
   // Find common available time slots
   const findCommonAvailability = () => {
@@ -135,53 +162,58 @@ const ProfessorCalendarPage = () => {
     }
   };
 
-  const getEventsForSlot = (day: Date, hour: number) => {
-    return selectedEvents.filter((event) => {
-      const eventDate = parseISO(event.start_date);
-      return isSameDay(eventDate, day) && eventDate.getHours() === hour;
-    });
-  };
-
   const getProfessorColor = (userId: string) => {
     return getUserEventStyle(userId);
   };
 
   const handleAddEvent = async () => {
-    if (!newEvent.title || !newEvent.date || !newEvent.time || !newEvent.category || !user) {
-      toast.error("필수 항목을 모두 입력해주세요");
+    if (!newEvent.title || !newEvent.date || !user) {
+      toast.error("제목과 날짜를 입력해주세요");
       return;
     }
 
-    const startDate = new Date(`${newEvent.date}T${newEvent.time}:00`);
-    const endDate = newEvent.endTime ? new Date(`${newEvent.date}T${newEvent.endTime}:00`) : undefined;
+    const startDateTimeStr = newEvent.isAllDay
+      ? `${newEvent.date}T00:00:00`
+      : `${newEvent.date}T${newEvent.time}`;
+
+    // Default end date to start date if not set
+    const endDateStr = newEvent.endDate || newEvent.date;
+    const endDateTimeStr = newEvent.isAllDay
+      ? `${endDateStr}T23:59:59`
+      : `${endDateStr}T${newEvent.endTime || newEvent.time}`;
 
     const { error } = await addEvent({
       title: newEvent.title,
-      start_date: startDate,
-      end_date: endDate,
+      start_date: new Date(startDateTimeStr),
+      end_date: new Date(endDateTimeStr),
       location: newEvent.location || undefined,
       category: newEvent.category,
     });
 
     if (error) {
       console.error("Event creation error:", error);
-      toast.error("일정 추가에 실패했습니다. 데이터베이스 설정을 확인해주세요.");
+      toast.error("일정 추가에 실패했습니다.");
       return;
     }
 
     toast.success("일정이 추가되었습니다");
     setIsDialogOpen(false);
-    setNewEvent({ title: "", date: "", time: "", endTime: "", location: "", category: "meeting" });
+    setNewEvent({ title: "", date: "", time: "09:00", endDate: "", endTime: "10:00", location: "", category: "meeting", isAllDay: false });
   };
 
   const handleDayClick = (day: Date, hour?: number) => {
-    setNewEvent((prev) => ({
-      ...prev,
-      date: format(day, "yyyy-MM-dd"),
-      time: hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : prev.time,
-      endTime: hour !== undefined ? `${(hour + 1).toString().padStart(2, "0")}:00` : prev.endTime,
-    }));
-    setIsDialogOpen(true);
+    if (presentationMode === 'list') {
+      setSelectedDate(day);
+    } else {
+      setNewEvent((prev) => ({
+        ...prev,
+        date: format(day, "yyyy-MM-dd"),
+        time: hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : "09:00",
+        endDate: format(day, "yyyy-MM-dd"),
+        endTime: hour !== undefined ? `${(hour + 1).toString().padStart(2, "0")}:00` : "10:00",
+      }));
+      setIsDialogOpen(true);
+    }
   };
 
   const handleDragCreate = (day: Date, startHour: number, endHour: number) => {
@@ -189,6 +221,7 @@ const ProfessorCalendarPage = () => {
       ...prev,
       date: format(day, "yyyy-MM-dd"),
       time: `${startHour.toString().padStart(2, "0")}:00`,
+      endDate: format(day, "yyyy-MM-dd"),
       endTime: `${endHour.toString().padStart(2, "0")}:00`,
     }));
     setIsDialogOpen(true);
@@ -236,11 +269,15 @@ const ProfessorCalendarPage = () => {
     return selectedEvents.filter((event) => isSameDay(parseISO(event.start_date), day));
   };
 
+  const handleDateTimeUpdate = (field: "date" | "time" | "endDate" | "endTime", value: string) => {
+    setNewEvent(prev => ({ ...prev, [field]: value }));
+  };
+
   return (
     <MainLayout title="교수 캘린더">
-      <div className="flex gap-6 h-[calc(100vh-180px)]">
+      <div className="flex gap-6 h-[calc(100vh-180px)] pb-10">
         {/* Left Panel - Professor List */}
-        <div className="w-[280px] flex-shrink-0 glass-card rounded-2xl p-4 overflow-hidden flex flex-col">
+        <div className="w-[280px] flex-shrink-0 glass-card rounded-2xl p-4 overflow-hidden flex flex-col h-full">
           <div className="mb-4">
             <h3 className="text-lg font-semibold mb-3">교수 선택</h3>
             <div className="relative mb-3">
@@ -290,7 +327,6 @@ const ProfessorCalendarPage = () => {
                   <AvatarFallback
                     className={cn(
                       "text-xs font-medium text-white",
-                      // Using getUserAvatarStyle for solid color to match event border
                       getUserAvatarStyle(profile.user_id)
                     )}
                   >
@@ -327,7 +363,7 @@ const ProfessorCalendarPage = () => {
         </div>
 
         {/* Right Panel - Calendar */}
-        <div className="flex-1 glass-card rounded-2xl overflow-hidden flex flex-col">
+        <div className="flex-1 glass-card rounded-2xl overflow-hidden flex flex-col h-full">
           {/* Calendar Header */}
           <div className="p-4 border-b border-border/30 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -341,7 +377,16 @@ const ProfessorCalendarPage = () => {
                 <ChevronRight className="h-5 w-5" />
               </Button>
             </div>
+
             <div className="flex items-center gap-2">
+              {/* Presentation Mode Toggle */}
+              <div className="bg-muted/50 p-1 rounded-lg">
+                <CalendarViewToggle
+                  currentView={presentationMode}
+                  onViewChange={setPresentationMode}
+                />
+              </div>
+
               {/* View Mode Toggle */}
               <div className="flex gap-1 bg-muted/50 p-1 rounded-lg">
                 {(["month", "week", "day"] as ViewMode[]).map((mode) => (
@@ -366,133 +411,178 @@ const ProfessorCalendarPage = () => {
             </div>
           </div>
 
-          {/* Calendar Views */}
-          <div className="flex-1 overflow-auto">
-            {viewMode === "month" && (
-              <div className="h-full">
-                {/* Weekday Headers */}
-                <div className="grid grid-cols-7 border-b border-border/30 sticky top-0 bg-card z-10">
-                  {["월", "화", "수", "목", "금", "토", "일"].map((day, i) => (
-                    <div
-                      key={day}
-                      className={cn(
-                        "p-2 text-center text-xs font-medium",
-                        i === 5 && "text-primary",
-                        i === 6 && "text-destructive"
-                      )}
-                    >
-                      {day}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Calendar Days */}
-                <div className="grid grid-cols-7">
-                  {calendarDays.map((day, idx) => {
-                    const dayEvents = getEventsForDay(day);
-                    const isCurrentMonth = isSameMonth(day, currentDate);
-                    const isCurrentDay = isSameDay(day, new Date());
-
-                    return (
+          {/* Calendar Views Container */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Calendar Area */}
+            <div className={cn(
+              "overflow-auto transition-all duration-300",
+              presentationMode === 'list' ? 'h-[50%]' : 'h-full'
+            )}>
+              {viewMode === "month" && (
+                <div className="h-full">
+                  {/* Weekday Headers */}
+                  <div className="grid grid-cols-7 border-b border-border/30 sticky top-0 bg-card z-10">
+                    {["월", "화", "수", "목", "금", "토", "일"].map((day, i) => (
                       <div
-                        key={idx}
-                        onClick={() => handleDayClick(day)}
+                        key={day}
                         className={cn(
-                          "min-h-[80px] p-1 border-b border-r border-border/20 cursor-pointer transition-colors hover:bg-muted/30",
-                          !isCurrentMonth && "bg-muted/10 opacity-50",
-                          isCurrentDay && "bg-primary/5"
+                          "p-2 text-center text-xs font-medium",
+                          i === 5 && "text-primary",
+                          i === 6 && "text-destructive"
                         )}
                       >
-                        <span
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar Days */}
+                  <div className="grid grid-cols-7">
+                    {calendarDays.map((day, idx) => {
+                      const dayEvents = getEventsForDay(day);
+                      const isCurrentMonth = isSameMonth(day, currentDate);
+                      const isCurrentDay = isSameDay(day, new Date());
+                      const isSelectedDay = isSameDay(day, selectedDate);
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => handleDayClick(day)}
                           className={cn(
-                            "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
-                            isCurrentDay && "bg-primary text-primary-foreground"
+                            "min-h-[80px] p-1 border-b border-r border-border/20 cursor-pointer transition-colors hover:bg-muted/30",
+                            !isCurrentMonth && "bg-muted/10 opacity-50",
+                            isCurrentDay && "bg-primary/5",
+                            (presentationMode === 'list' && isSelectedDay) && "bg-primary/10 ring-1 ring-inset ring-primary"
                           )}
                         >
-                          {format(day, "d")}
-                        </span>
-                        <div className="space-y-0.5 mt-0.5">
-                          {dayEvents.slice(0, 2).map((event) => (
-                            <div
-                              key={event.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedEvent(event);
-                                setIsDetailModalOpen(true);
-                              }}
-                              className={cn(
-                                "text-[10px] p-0.5 rounded text-white truncate cursor-pointer bg-gradient-to-r",
-                                getProfessorColor(event.created_by)
-                              )}
-                            >
-                              {event.title}
-                            </div>
-                          ))}
-                          {dayEvents.length > 2 && (
-                            <div className="text-[10px] text-muted-foreground">
-                              +{dayEvents.length - 2}
-                            </div>
-                          )}
+                          <span
+                            className={cn(
+                              "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
+                              isCurrentDay && "bg-primary text-primary-foreground"
+                            )}
+                          >
+                            {format(day, "d")}
+                          </span>
+                          <div className="space-y-0.5 mt-0.5">
+                            {dayEvents.slice(0, 2).map((event) => (
+                              <div
+                                key={event.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedEvent(event);
+                                  setIsDetailModalOpen(true);
+                                }}
+                                className={cn(
+                                  "text-[10px] p-0.5 rounded text-white truncate cursor-pointer bg-gradient-to-r",
+                                  getProfessorColor(event.created_by)
+                                )}
+                              >
+                                {event.title}
+                              </div>
+                            ))}
+                            {dayEvents.length > 2 && (
+                              <div className="text-[10px] text-muted-foreground">
+                                +{dayEvents.length - 2}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
+              )}
+
+              {viewMode === "week" && (
+                <CalendarWeekView
+                  date={currentDate}
+                  events={selectedEvents}
+                  onEventClick={(event) => {
+                    setSelectedEvent(event);
+                    setIsDetailModalOpen(true);
+                  }}
+                  onSlotClick={(day, hour) => handleDayClick(day, hour)}
+                  onDragCreate={handleDragCreate}
+                />
+              )}
+
+              {viewMode === "day" && (
+                <CalendarDayView
+                  date={currentDate}
+                  events={selectedEvents}
+                  onEventClick={(event) => {
+                    setSelectedEvent(event);
+                    setIsDetailModalOpen(true);
+                  }}
+                  onSlotClick={(day, hour) => handleDayClick(day, hour)}
+                  onDragCreate={handleDragCreate}
+                />
+              )}
+            </div>
+
+            {/* List View Area */}
+            {presentationMode === "list" && (
+              <div className="h-[50%] border-t border-border/30 overflow-y-auto bg-background/50 backdrop-blur-sm p-4">
+                <EventList
+                  date={selectedDate}
+                  events={selectedDateEvents as TransformedEvent[]}
+                  onEventClick={(event) => {
+                    setSelectedEvent(event);
+                    setIsDetailModalOpen(true);
+                  }}
+                />
               </div>
             )}
 
-            {viewMode === "week" && (
-              <CalendarWeekView
-                date={currentDate}
-                events={selectedEvents}
-                onEventClick={(event) => {
-                  setSelectedEvent(event);
-                  setIsDetailModalOpen(true);
-                }}
-                onSlotClick={(day, hour) => handleDayClick(day, hour)}
-                onDragCreate={handleDragCreate}
-              />
-            )}
-
-            {viewMode === "day" && (
-              <CalendarDayView
-                date={currentDate}
-                events={selectedEvents}
-                onEventClick={(event) => {
-                  setSelectedEvent(event);
-                  setIsDetailModalOpen(true);
-                }}
-                onSlotClick={(day, hour) => handleDayClick(day, hour)}
-                onDragCreate={handleDragCreate}
-              />
-            )}
           </div>
         </div>
 
-        {/* Add Event Dialog */}
+        {/* Add Event Dialog with AppleDateTimePicker */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-[500px] glass-dialog">
+          <DialogContent className="sm:max-w-[500px] glass-dialog max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-xl font-semibold">새 일정 추가</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>제목 *</Label>
                 <Input
-                  placeholder="일정 제목"
+                  placeholder="제목"
                   value={newEvent.title}
                   onChange={(e) => setNewEvent((prev) => ({ ...prev, title: e.target.value }))}
+                  className="text-lg font-medium bg-transparent border-0 border-b border-border/50 rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
                 />
               </div>
 
+              {/* Apple-style Date/Time Section */}
+              <AppleDateTimePicker
+                date={newEvent.date}
+                time={newEvent.time}
+                endDate={newEvent.endDate}
+                endTime={newEvent.endTime}
+                isAllDay={newEvent.isAllDay}
+                onAllDayChange={(checked) => {
+                  if (checked) {
+                    setNewEvent(prev => ({ ...prev, isAllDay: true, time: "", endTime: "" }));
+                  } else {
+                    setNewEvent(prev => ({
+                      ...prev,
+                      isAllDay: false,
+                      time: prev.time || "09:00",
+                      endTime: prev.endTime || "10:00"
+                    }));
+                  }
+                }}
+                onUpdate={handleDateTimeUpdate}
+              />
+
               <div className="space-y-2">
-                <Label>카테고리 *</Label>
+                <Label className="text-xs text-muted-foreground">카테고리</Label>
                 <Select
                   value={newEvent.category}
                   onValueChange={(value) => setNewEvent((prev) => ({ ...prev, category: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-muted/30 border-0 h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -505,43 +595,16 @@ const ProfessorCalendarPage = () => {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-2">
-                  <Label>날짜 *</Label>
-                  <Input
-                    type="date"
-                    value={newEvent.date}
-                    onChange={(e) => setNewEvent((prev) => ({ ...prev, date: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>시작 시간 *</Label>
-                  <Input
-                    type="time"
-                    value={newEvent.time}
-                    onChange={(e) => setNewEvent((prev) => ({ ...prev, time: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>종료 시간</Label>
-                  <Input
-                    type="time"
-                    value={newEvent.endTime}
-                    onChange={(e) => setNewEvent((prev) => ({ ...prev, endTime: e.target.value }))}
-                  />
-                </div>
-              </div>
-
               <div className="space-y-2">
-                <Label>장소</Label>
                 <Input
                   placeholder="장소"
                   value={newEvent.location}
                   onChange={(e) => setNewEvent((prev) => ({ ...prev, location: e.target.value }))}
+                  className="bg-transparent border-0 border-b border-border/50 rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary text-muted-foreground"
                 />
               </div>
 
-              <Button onClick={handleAddEvent} className="w-full">
+              <Button onClick={handleAddEvent} className="w-full btn-elegant">
                 추가
               </Button>
             </div>
