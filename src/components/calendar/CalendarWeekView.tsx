@@ -28,7 +28,7 @@ interface WeekViewProps {
   onDragCreate?: (date: Date, startHour: number, endHour: number) => void;
 }
 
-const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7am to 9pm
+const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0am to 11pm
 const SLOT_HEIGHT = 48;
 
 // CalDAV event default color
@@ -105,7 +105,7 @@ export function CalendarWeekView({
     const startHour = start.getHours() + start.getMinutes() / 60;
     const endHour = end.getHours() + end.getMinutes() / 60;
 
-    const top = (startHour - 7) * SLOT_HEIGHT;
+    const top = startHour * SLOT_HEIGHT;
     const height = Math.max((endHour - startHour) * SLOT_HEIGHT, 24);
 
     return { top, height };
@@ -256,7 +256,7 @@ export function CalendarWeekView({
                     <div
                       className="absolute left-0 right-0 border-t-2 border-destructive z-10 pointer-events-none"
                       style={{
-                        top: (new Date().getHours() - 7 + new Date().getMinutes() / 60) * SLOT_HEIGHT,
+                        top: (new Date().getHours() + new Date().getMinutes() / 60) * SLOT_HEIGHT,
                       }}
                     >
                       <div className="absolute -left-0.5 -top-1 w-2 h-2 rounded-full bg-destructive" />

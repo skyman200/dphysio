@@ -30,7 +30,7 @@ type ViewMode = "month" | "week" | "day";
 import { getUserColor, getUserEventStyle, getUserChipStyle, getUserAvatarStyle } from "@/lib/colors";
 import { TransformedEvent } from "@/types";
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8am to 7pm
+const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0am to 11pm
 
 const ProfessorCalendarPage = () => {
   const { events, addEvent } = useEvents();

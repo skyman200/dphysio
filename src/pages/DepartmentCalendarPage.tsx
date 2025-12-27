@@ -202,7 +202,7 @@ const DepartmentCalendarPage = () => {
           {/* 캘린더 뷰 */}
           <div className={cn(
             "transition-all duration-300",
-            presentationMode === "list" ? "h-[450px]" : "min-h-[600px]" // shrink calendar in list mode
+            presentationMode === "list" ? "h-auto" : "min-h-[600px]" // shrink calendar in list mode
           )}>
             {navigation.viewMode === "month" && (
               <CalendarMonthView

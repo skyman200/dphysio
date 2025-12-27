@@ -25,7 +25,7 @@ interface DayViewProps {
   onDragCreate?: (date: Date, startHour: number, endHour: number) => void;
 }
 
-const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7am to 9pm
+const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0am to 11pm
 const SLOT_HEIGHT = 60;
 
 export function CalendarDayView({
@@ -70,7 +70,7 @@ export function CalendarDayView({
     const startHour = start.getHours() + start.getMinutes() / 60;
     const endHour = end.getHours() + end.getMinutes() / 60;
 
-    const top = (startHour - 7) * SLOT_HEIGHT;
+    const top = startHour * SLOT_HEIGHT;
     const height = Math.max((endHour - startHour) * SLOT_HEIGHT, 30);
 
     return { top, height };
@@ -165,7 +165,7 @@ export function CalendarDayView({
             <div
               className="absolute left-0 right-0 border-t-2 border-destructive z-10 pointer-events-none"
               style={{
-                top: (new Date().getHours() - 7 + new Date().getMinutes() / 60) * SLOT_HEIGHT,
+                top: (new Date().getHours() + new Date().getMinutes() / 60) * SLOT_HEIGHT,
               }}
             >
               <div className="absolute -left-1 -top-1.5 w-3 h-3 rounded-full bg-destructive" />
