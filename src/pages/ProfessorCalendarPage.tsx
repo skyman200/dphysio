@@ -23,6 +23,7 @@ import { EventList } from "@/components/calendar/EventList";
 import { WeeklyEventList } from "@/components/calendar/WeeklyEventList";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarViewToggle, ViewType } from "@/components/calendar/CalendarViewToggle";
+import { CalendarSubscribeButton } from "@/components/calendar/CalendarSubscribeButton";
 
 import { EVENT_CATEGORIES } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -411,6 +412,7 @@ const ProfessorCalendarPage = () => {
               >
                 오늘
               </Button>
+              <CalendarSubscribeButton type="professor" userId={user?.uid} />
             </div>
           </div>
 

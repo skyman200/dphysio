@@ -15,6 +15,7 @@ import type { TransformedEvent } from "@/types";
 import { EventList } from "@/components/calendar/EventList";
 import { WeeklyEventList } from "@/components/calendar/WeeklyEventList";
 import { ViewType } from "@/components/calendar/CalendarViewToggle";
+import { CalendarSubscribeButton } from "@/components/calendar/CalendarSubscribeButton";
 import { cn } from "@/lib/utils";
 
 const DepartmentCalendarPage = () => {
@@ -174,6 +175,11 @@ const DepartmentCalendarPage = () => {
           onAddClick={() => eventForm.setIsDialogOpen(true)}
           onToggleFilter={toggleFilter}
         />
+
+        {/* Calendar Subscription */}
+        <div className="flex justify-end -mt-4 mb-2">
+          <CalendarSubscribeButton type="department" />
+        </div>
 
         {/* Bulk Delete Controls (Chief Only) */}
         {isChief && (

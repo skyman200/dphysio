@@ -472,3 +472,203 @@ export const getNaverCustomToken = onCall(FUNCTION_OPTIONS, async (request) => {
         throw new HttpsError('internal', error.message || 'Internal server error during Naver login');
     }
 });
+
+// ============================================
+// iCalendar Feed for webcal:// Subscription
+// ============================================
+import { onRequest } from 'firebase-functions/v2/https';
+
+/**
+ * Generate iCalendar feed for calendar subscription
+ * Endpoint: GET /getCalendarFeed?type=department|professor&userId=xxx
+ * 
+ * Usage:
+ *   - Department calendar: webcal://us-central1-physio-materials.cloudfunctions.net/getCalendarFeed?type=department
+ *   - Professor calendar: webcal://us-central1-physio-materials.cloudfunctions.net/getCalendarFeed?type=professor&userId=xxx
+ */
+export const getCalendarFeed = onRequest({
+    cors: true, // Allow all origins for iCal clients
+    maxInstances: 10,
+}, async (req, res) => {
+    // Only allow GET requests
+    if (req.method !== 'GET') {
+        res.status(405).send('Method Not Allowed');
+        return;
+    }
+
+    const feedType = req.query.type as string || 'department';
+    const userId = req.query.userId as string;
+
+    try {
+        // Query events from Firestore
+        let query = db.collection('events').orderBy('start_date', 'asc');
+
+        // Filter based on feed type
+        if (feedType === 'professor') {
+            if (userId) {
+                query = query.where('created_by', '==', userId);
+            }
+            query = query.where('type', '==', 'professor');
+        } else {
+            // Department: Include all department events
+            query = query.where('type', 'in', ['department', 'professor']);
+        }
+
+        // Limit to prevent excessive data
+        const snapshot = await query.limit(500).get();
+
+        // Generate iCalendar content
+        const icsContent = generateICS(snapshot.docs, feedType);
+
+        // Set proper headers for iCalendar
+        res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="physio-${feedType}-calendar.ics"`);
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+        res.status(200).send(icsContent);
+    } catch (error: any) {
+        console.error('Error generating calendar feed:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+/**
+ * Generate iCalendar (ICS) format content from Firestore documents
+ */
+function generateICS(docs: FirebaseFirestore.QueryDocumentSnapshot[], feedType: string): string {
+    const now = new Date();
+    const timestamp = formatICSDate(now);
+
+    let ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Physio Materials//Calendar//KO
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:물리치료학과 ${feedType === 'professor' ? '교수' : '학과'} 캘린더
+X-WR-TIMEZONE:Asia/Seoul
+BEGIN:VTIMEZONE
+TZID:Asia/Seoul
+BEGIN:STANDARD
+DTSTART:19700101T000000
+TZOFFSETFROM:+0900
+TZOFFSETTO:+0900
+TZNAME:KST
+END:STANDARD
+END:VTIMEZONE
+`;
+
+    for (const doc of docs) {
+        const data = doc.data();
+
+        // Skip invalid events
+        if (!data.start_date || !data.title) continue;
+
+        const uid = `${doc.id}@physio-materials.web.app`;
+        const summary = escapeICSText(data.title);
+        const description = escapeICSText(data.description || '');
+        const location = escapeICSText(data.location || '');
+
+        // Parse dates
+        const startDate = new Date(data.start_date);
+        const endDate = data.end_date ? new Date(data.end_date) : new Date(startDate.getTime() + 60 * 60 * 1000); // Default 1 hour
+
+        // Check if all-day event
+        const isAllDay = data.is_all_day ||
+            (startDate.getHours() === 0 && startDate.getMinutes() === 0 &&
+                endDate.getHours() === 23 && endDate.getMinutes() === 59);
+
+        let dtstart: string;
+        let dtend: string;
+
+        if (isAllDay) {
+            dtstart = `DTSTART;VALUE=DATE:${formatICSDateOnly(startDate)}`;
+            // For all-day events, end date should be the next day
+            const nextDay = new Date(endDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            dtend = `DTEND;VALUE=DATE:${formatICSDateOnly(nextDay)}`;
+        } else {
+            dtstart = `DTSTART;TZID=Asia/Seoul:${formatICSDateTime(startDate)}`;
+            dtend = `DTEND;TZID=Asia/Seoul:${formatICSDateTime(endDate)}`;
+        }
+
+        // Get category
+        const categories = getCategoryLabel(data.category);
+
+        ics += `BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${timestamp}
+${dtstart}
+${dtend}
+SUMMARY:${summary}
+${description ? `DESCRIPTION:${description}` : ''}
+${location ? `LOCATION:${location}` : ''}
+CATEGORIES:${categories}
+STATUS:CONFIRMED
+TRANSP:OPAQUE
+END:VEVENT
+`;
+    }
+
+    ics += 'END:VCALENDAR';
+    return ics;
+}
+
+/**
+ * Format date for iCalendar DTSTAMP (UTC)
+ */
+function formatICSDate(date: Date): string {
+    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+/**
+ * Format date for iCalendar DTSTART/DTEND with timezone
+ */
+function formatICSDateTime(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+}
+
+/**
+ * Format date for all-day events (DATE only, no time)
+ */
+function formatICSDateOnly(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}${month}${day}`;
+}
+
+/**
+ * Escape special characters for iCalendar text fields
+ */
+function escapeICSText(text: string): string {
+    if (!text) return '';
+    return text
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\n/g, '\\n');
+}
+
+/**
+ * Get Korean category label
+ */
+function getCategoryLabel(category: string): string {
+    const labels: Record<string, string> = {
+        'meeting': '회의',
+        'education': '교육',
+        'trip': '출장',
+        'counseling': '상담',
+        'personal': '개인',
+        'report': '보고서',
+        'admin': '행정',
+        'event': '행사',
+        'other': '기타',
+    };
+    return labels[category] || '기타';
+}
