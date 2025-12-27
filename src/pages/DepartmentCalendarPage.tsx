@@ -14,6 +14,7 @@ import { EventDetailModal } from "@/components/calendar/EventDetailModal";
 import type { TransformedEvent } from "@/types";
 import { EventList } from "@/components/calendar/EventList";
 import { ViewType } from "@/components/calendar/CalendarViewToggle";
+import { cn } from "@/lib/utils";
 
 const DepartmentCalendarPage = () => {
   const { events } = useEvents();
