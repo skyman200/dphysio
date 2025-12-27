@@ -124,22 +124,30 @@ export function CalendarMonthView({
     };
 
     const getMultiDayEventStyle = (event: TransformedEvent) => {
-        // 1. Check for specific event type styling first (Department, Professor, etc.)
+        // 1. Special case for Professor events: Use User Color
+        if (event.type === 'professor') {
+            return getUserEventStyle(event.created_by);
+        }
+
+        // 2. Check for other specific event type styling
         const typeStyle = getEventTypeStyle(event.type);
         if (typeStyle) return typeStyle;
 
-        // 2. Fallback to CalDAV specific logic
+        // 3. Fallback to CalDAV specific logic
         if (event.source === "caldav" || event.type === "caldav") {
             return event.caldav_calendar_color
                 ? `text-white`
                 : "bg-[#FF6B6B] text-white";
         }
 
-        // 3. Fallback to User color
+        // 4. Fallback to User color
         return getUserEventStyle(event.created_by);
     };
 
     const getMultiDayEventBgColor = (event: TransformedEvent) => {
+        // If professor, let type style (user color) handle it via className
+        if (event.type === 'professor') return undefined;
+
         // If type style is used, we don't want to override bg color with undefined
         if (getEventTypeStyle(event.type)) return undefined;
 
@@ -230,12 +238,11 @@ export function CalendarMonthView({
                                         const dayEvents = weekEvents.filter(e => {
                                             const start = new Date(e.start_date);
                                             const end = e.end_date ? new Date(e.end_date) : start;
-                                            return start <= day && end >= day && isSameDay(day, start); // Only dot on start day? Or every day? User said "color dot". Usually every day event exists.
-                                            // Actually user said "일정에 색깔 dot를 찍게 해주고".
-                                            // Should be dot for each event on that day.
+                                            return start <= day && end >= day && isSameDay(day, start);
                                         });
 
-                                        // Filter events that actually span this day
+                                        // Filter events that actually span this day for rendering dots
+                                        // A dot for every event active on this day
                                         const eventsOnDay = weekEvents.filter(e => {
                                             const start = startOfDay(new Date(e.start_date));
                                             const end = e.end_date ? startOfDay(new Date(e.end_date)) : start;
@@ -246,24 +253,28 @@ export function CalendarMonthView({
                                         if (eventsOnDay.length === 0) return null;
 
                                         return (
-                                            <div key={dayIdx} className="col-start-[auto] row-start-1 flex justify-center items-end h-full pb-1 gap-0.5" style={{ gridColumnStart: dayIdx + 1 }}>
+                                            <div key={dayIdx} className="col-start-[auto] row-start-1 flex justify-center items-end h-full pb-2 gap-1" style={{ gridColumnStart: dayIdx + 1 }}>
                                                 {eventsOnDay.slice(0, 5).map(event => (
                                                     <div
                                                         key={`${event.id}-${dayIdx}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onEventClick(event);
+                                                        }}
                                                         className={cn(
-                                                            "w-1.5 h-1.5 rounded-full",
-                                                            getMultiDayEventStyle(event)?.replace('bg-', 'bg-') || "bg-primary" // Ensure bg color
+                                                            "w-2.5 h-2.5 rounded-full cursor-pointer hover:scale-125 transition-transform pointer-events-auto shadow-sm ring-1 ring-white/50",
+                                                            getMultiDayEventStyle(event)?.replace('bg-', 'bg-') || "bg-primary"
                                                         )}
+                                                        title={event.title}
                                                     />
                                                 ))}
-                                                {eventsOnDay.length > 5 && <span className="text-[8px] text-muted-foreground">+</span>}
+                                                {eventsOnDay.length > 5 && <span className="text-[10px] text-muted-foreground font-bold leading-none mb-1">+</span>}
                                             </div>
                                         );
                                     })
                                 ) : (
                                     // Detailed & Stack View
                                     weekEvents.map((event) => {
-                                        // For stack view, show more events by reducing height and hiding title
                                         const isStack = presentationMode === 'stack';
                                         if (!isStack && event.rowIndex > 4) return null; // Detailed limit
                                         if (isStack && event.rowIndex > 10) return null; // Stack limit (higher)
@@ -277,15 +288,16 @@ export function CalendarMonthView({
                                             ? "h-1.5 mb-0.5 hover:h-4 transition-all"
                                             : "text-xs px-2 py-0.5 mb-0.5";
 
+                                        // Professor Type Border
+                                        const leftBorderStyle = event.type === 'professor'
+                                            ? "border-l-[3px] border-emerald-500/80"
+                                            : "";
+
                                         const finalStyle = isSingleDay
                                             ? cn(
                                                 "truncate cursor-pointer hover:scale-105 transition-all font-medium pointer-events-auto rounded text-foreground bg-transparent",
                                                 !isStack && "border-l-2 px-1 py-0.5",
-                                                isStack && "h-1.5 w-1.5 rounded-full mx-auto mb-0.5", // Stack single day -> dot? Or bar?
-                                                // User said "스택처럼 그 날짜에 색깔을 달리해서 쌓이게"
-                                                // Let's make single day also a bar in stack mode for consistency? Or dot.
-                                                // If stack mode, single day events should ideally stack too.
-                                                // Let's use bar for all in stack mode.
+                                                !isStack && leftBorderStyle && leftBorderStyle.replace('border-l-[3px]', 'border-l-4'), // Thicker for single day
                                                 isStack && "w-full h-1.5 mb-0.5 rounded-sm",
                                                 getUserChipStyle(event.created_by),
                                                 isSelectMode && isSelected && "ring-2 ring-primary ring-offset-1 bg-primary/10",
@@ -297,6 +309,7 @@ export function CalendarMonthView({
                                                 event.isContinuedAfter && "rounded-r-none mx-0 border-r border-white/20",
                                                 stackStyle,
                                                 barStyle,
+                                                !isStack && leftBorderStyle, // Apply left border
                                                 isSelectMode && isSelected && "ring-2 ring-primary ring-offset-1"
                                             );
 
@@ -317,7 +330,7 @@ export function CalendarMonthView({
                                                 title={event.title}
                                             >
                                                 {!isStack && (
-                                                    <span className={cn("truncate flex items-center gap-1", !isSingleDay && "justify-center w-full")}>
+                                                    <span className={cn("truncate flex items-center gap-1", !isSingleDay && "justify-center w-full", isSingleDay && event.type === 'professor' && "pl-1")}>
                                                         {isSelectMode && (
                                                             <div className={`w-3 h-3 rounded-full border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary border-primary' : 'bg-white border-gray-300'}`}>
                                                                 {isSelected && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
