@@ -1,0 +1,244 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // 헬퍼 함수
+    // ============================================
+    
+    // 인증된 사용자 체크
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 사용자 정보 가져오기
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // 관리자 체크 (admin 또는 학과장)
+    function isAdmin() {
+      let role = getUserData().role;
+      return role == 'admin' || role == '학과장' || role == 'chief';
+    }
+    
+    // 교수 이상 체크 (admin, 학과장, 교수)
+    function isProfessorOrAdmin() {
+      let role = getUserData().role;
+      return role in ['admin', 'professor', 'chief', '학과장', '교수'];
+    }
+    
+    // 본인 체크
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // ============================================
+    // 자료 컬렉션 (materials)
+    // ============================================
+    match /materials/{materialId} {
+      // 읽기: 인증된 모든 사용자
+      allow read: if isAuthenticated();
+      
+      // 생성: 인증된 사용자
+      allow create: if isAuthenticated();
+      
+      // 수정: 본인이 올린 자료 또는 관리자
+      allow update: if isAuthenticated() && 
+        (resource.data.uploadedBy == request.auth.uid || isAdmin());
+      
+      // 삭제: 본인이 올린 자료 또는 관리자
+      allow delete: if isAuthenticated() && 
+        (resource.data.uploadedBy == request.auth.uid || isAdmin());
+    }
+    
+    // ============================================
+    // 스마트 사전 (smart_dictionary)
+    // ============================================
+    match /smart_dictionary/{wordId} {
+      // 읽기: 인증된 모든 사용자
+      allow read: if isAuthenticated();
+      
+      // 생성/수정: 인증된 사용자
+      allow create, update: if isAuthenticated();
+      
+      // 삭제: 관리자만
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 사용자 컬렉션 (users)
+    // ============================================
+    match /users/{userId} {
+      // 읽기: 인증된 사용자 모두 (프로필 표시용)
+      allow read: if isAuthenticated();
+      
+      // 생성: 본인만
+      allow create: if isOwner(userId);
+      
+      // 수정: 본인 또는 관리자
+      // 본인은 자유롭게 수정 가능 (프로필 완성 후에는 role 변경만 제한)
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // 삭제: 관리자만
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 다운로드 로그 (downloadLogs)
+    // ============================================
+    match /downloadLogs/{logId} {
+      // 읽기: 관리자만
+      allow read: if isAdmin();
+      
+      // 생성: 인증된 사용자
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      
+      // 수정/삭제 불가
+      allow update, delete: if false;
+    }
+    
+    // ============================================
+    // 카테고리 (categories) - 선택사항
+    // ============================================
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ============================================
+    // 일정 관련 컬렉션 (events)
+    // ============================================
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      // 수정: 본인이 만든 일정 또는 관리자만
+      allow update: if isAuthenticated() && 
+        (resource.data.created_by == request.auth.uid || isAdmin());
+      // 삭제: 본인이 만든 일정 또는 관리자만
+      allow delete: if isAuthenticated() && 
+        (resource.data.created_by == request.auth.uid || isAdmin());
+    }
+    
+    // ============================================
+    // 할 일 (todos)
+    // ============================================
+    match /todos/{todoId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      // 수정: 본인이 만든 할 일 또는 관리자만
+      allow update: if isAuthenticated() && 
+        (resource.data.created_by == request.auth.uid || isAdmin());
+      // 삭제: 본인이 만든 할 일 또는 관리자만
+      allow delete: if isAuthenticated() && 
+        (resource.data.created_by == request.auth.uid || isAdmin());
+    }
+    
+    // ============================================
+    // 회의 아이템 (meeting_items)
+    // ============================================
+    match /meeting_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      // 인증된 사용자는 모두 수정/삭제 가능
+      allow update, delete: if isAuthenticated();
+    }
+    
+    // ============================================
+    // 일정 참여자 (schedule_participants)
+    // ============================================
+    match /schedule_participants/{participantId} {
+      allow read: if isAuthenticated();
+      // 생성: 인증된 사용자 (본인 user_id만 허용)
+      allow create: if isAuthenticated() && 
+        request.resource.data.user_id == request.auth.uid;
+      // 수정: 본인만 가능
+      allow update: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+      // 삭제: 본인 또는 일정 소유자만 (관리자 포함)
+      allow delete: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+    
+    // ============================================
+    // 스레드 메시지 (thread_messages)
+    // ============================================
+    match /thread_messages/{messageId} {
+      allow read: if isAuthenticated();
+      // 생성: 인증된 사용자 (본인 user_id만 허용)
+      allow create: if isAuthenticated() && 
+        request.resource.data.user_id == request.auth.uid;
+      // 수정: 본인이 작성한 메시지만 수정 가능
+      allow update: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+      // 삭제: 본인 또는 관리자만
+      allow delete: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+    
+    // ============================================
+    // 스레드 읽음 상태 (thread_reads)
+    // ============================================
+    match /thread_reads/{readId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // ============================================
+    // 이벤트 읽음 상태 (event_reads)
+    // ============================================
+    match /event_reads/{readId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // ============================================
+    // 자원 (resources)
+    // ============================================
+    match /resources/{resourceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Allow seeding by any authenticated user
+      allow update: if isProfessorOrAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 예약 (reservations)
+    // ============================================
+    match /reservations/{reservationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+
+    // ============================================
+    // 활동 로그 (activity_logs)
+    // ============================================
+    match /activity_logs/{logId} {
+      // 생성: 인증된 사용자
+      allow create: if isAuthenticated();
+      // 읽기: 본인 또는 학과장/관리자
+      allow read: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isProfessorOrAdmin());
+      // 수정/삭제: 관리자만
+      allow update, delete: if isAdmin();
+    }
+
+    // ============================================
+    // 사용자 세션 (user_sessions)
+    // ============================================
+    match /user_sessions/{sessionId} {
+      // 생성: 인증된 사용자
+      allow create: if isAuthenticated();
+      // 읽기/수정: 본인 세션 또는 학과장/관리자
+      allow read, update: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isProfessorOrAdmin());
+      // 삭제: 관리자만
+      allow delete: if isAdmin();
+    }
+  }
+}

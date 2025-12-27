@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc
+
+# Environment variables (SECURITY CRITICAL)
+.env
+.env.local
+.env.*.local
+functions/.env
+functions/.env.local
+
+# Cloud Functions build output
+functions/lib/
+
+# Electron build output
+electron-dist/
+
+# Tauri build output
+src-tauri/target/

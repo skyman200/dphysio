@@ -1,0 +1,77 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ============================================
+    // 헬퍼 함수
+    // ============================================
+    
+    // 인증 체크
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 업로드 권한 체크 (교수/관리자)
+    function canUpload() {
+      return request.auth.token.role in ['admin', 'professor'];
+    }
+    
+    // 관리자 체크
+    function isAdmin() {
+      return request.auth.token.role == 'admin';
+    }
+    
+    // 파일 크기 제한 (50MB)
+    function isValidSize() {
+      return request.resource.size < 50 * 1024 * 1024;
+    }
+    
+    // 허용된 파일 형식 체크
+    function isValidType() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('application/.*hwp.*') ||
+             request.resource.contentType.matches('application/haansofthwp') ||
+             request.resource.contentType.matches('application/x-hwp') ||
+             request.resource.contentType.matches('application/octet-stream') ||
+             request.resource.contentType.matches('image/.*');
+    }
+    
+    // ============================================
+    // 자료 폴더 (materials)
+    // ============================================
+    match /materials/{allPaths=**} {
+      // 읽기: 인증된 사용자만 (파일 직접 노출 방지!)
+      allow read: if isAuthenticated();
+      
+      // 쓰기: 교수/관리자만 + 파일 검증
+      allow write: if canUpload() && isValidSize() && isValidType();
+      
+      // 삭제: 관리자만
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 프로필 이미지 (profiles) - 선택사항
+    // ============================================
+    match /profiles/{userId}/{allPaths=**} {
+      // 읽기: 인증된 사용자
+      allow read: if isAuthenticated();
+      
+      // 쓰기: 본인만
+      allow write: if request.auth.uid == userId &&
+        request.resource.size < 5 * 1024 * 1024 && // 5MB 제한
+        request.resource.contentType.matches('image/.*');
+      
+      // 삭제: 본인 또는 관리자
+      allow delete: if request.auth.uid == userId || isAdmin();
+    }
+    
+    // ============================================
+    // 임시 업로드 폴더 (temp) - 선택사항
+    // ============================================
+    match /temp/{userId}/{allPaths=**} {
+      allow read, write: if request.auth.uid == userId;
+      allow delete: if request.auth.uid == userId || isAdmin();
+    }
+  }
+}
