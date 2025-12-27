@@ -1,7 +1,7 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
     "productName": "물리치료학과 대시보드",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "identifier": "com.koreapt.dashboard",
     "build": {
         "beforeDevCommand": "npm run dev",
@@ -47,7 +47,7 @@
             "endpoints": [
                 "https://github.com/skyman200/dphysio/releases/latest/download/latest.json"
             ],
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBBRjYzMDgzQzc2RkJCQTgKUldTb3UyL0hnekQyQ3NmNnJWMW9YaUg2WWdHZmpqWGU2QjdXNlB1REt0Y1huVFZRQUdCVDVTSXkK"
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBDQkQwMEM4RjNDQ0RBQjYKUldTMjJzenp5QUM5RE11UzRPTWxMS2ZkanRhZEtGTFU5N0c4NkVoaEFyVE5mTXdUWTVSaFAwN0EK"
         }
     }
 }
