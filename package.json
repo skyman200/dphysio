@@ -15,7 +15,8 @@
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules,storage:rules",
     "electron:dev": "concurrently -k \"cross-env BROWSER=none vite\" \"wait-on http://localhost:8080 && cross-env VITE_DEV_SERVER_URL=http://localhost:8080 electron .\"",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder",
+    "tauri": "tauri"
   },
   "build": {
     "appId": "com.koreapt.dashboard",
