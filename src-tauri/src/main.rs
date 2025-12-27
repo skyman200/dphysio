@@ -6,6 +6,7 @@ use tauri::{
     Manager, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::ManagerExt; // Import ManagerExt for autolaunch()
 use tauri_plugin_updater::UpdaterExt;
 
 fn main() {
@@ -17,6 +18,9 @@ fn main() {
             Some(vec!["--hidden"]),
         ))
         .setup(|app| {
+            // Enable auto-start by default
+            let _ = app.autolaunch().enable();
+
             // Check for updates on startup
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -112,7 +116,8 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<(), Box<dyn std::err
                 )
                 .await;
             
-            println!("Update installed, please restart the app");
+            println!("Update installed, restarting app...");
+            app.restart();
         }
         Ok(None) => {
             println!("No update available");
