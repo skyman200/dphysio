@@ -53,9 +53,9 @@ export function useFileResources() {
 
             const snapshot = await getDocs(q);
 
-            const docs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
+            const docs = snapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                ...(docSnap.data() as Omit<FileResource, 'id'>)
             })) as FileResource[];
 
             if (isLoadMore) {

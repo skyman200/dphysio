@@ -15,7 +15,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
-            Some(vec!["--hidden"]),
+            None, // --hidden 제거: WebView 렌더링 이슈 해결
         ))
         .setup(|app| {
             // Enable auto-start by default

@@ -3,6 +3,9 @@ import { useEvents } from '@/hooks/useEvents';
 import { differenceInDays, parseISO, startOfDay } from 'date-fns';
 import { DashboardEvent } from '@/types';
 
+// Re-export for convenience
+export type { DashboardEvent };
+
 export const useDashboardData = () => {
     const { events } = useEvents();
 
