@@ -30,7 +30,7 @@ export function WheelPicker({
                 containerRef.current.scrollTop = index * itemHeight;
             }
         }
-    }, []); // Only on mount to avoid fighting with user scroll
+    }, []); // Only on mount
 
     useEffect(() => {
         // Sync external value changes if not currently scrolling
@@ -53,17 +53,12 @@ export function WheelPicker({
             const scrollTop = containerRef.current.scrollTop;
             const selectedIndex = Math.round(scrollTop / itemHeight);
 
-            // Debounce the selection update slightly to avoid rapid updates during fast scroll
-            // but still feel responsive
             if (options[selectedIndex] && options[selectedIndex].value !== value) {
-                // Optionally update immediately if needed, or wait for snap
-                // For wheel picker, updating while scrolling is good for visual feedback
                 onChange(options[selectedIndex].value);
             }
 
             scrollTimeout.current = setTimeout(() => {
                 setIsScrolling(false);
-                // Ensure perfect snap on stop
                 const finalIndex = Math.round(containerRef.current!.scrollTop / itemHeight);
                 if (options[finalIndex] && options[finalIndex].value !== value) {
                     onChange(options[finalIndex].value);
@@ -74,20 +69,20 @@ export function WheelPicker({
 
     return (
         <div className={cn("relative overflow-hidden group", className)} style={{ height }}>
-            {/* Selection Highlight / Magnifier */}
+            {/* Selection Highlight - Z-index fixed to be behind text */}
             <div
-                className="absolute w-full pointer-events-none z-10 top-1/2 -translate-y-1/2 border-y border-border/10 bg-muted/10 backdrop-blur-[1px]"
+                className="absolute w-full pointer-events-none top-1/2 -translate-y-1/2 border-y border-border/20 bg-muted/5 z-0"
                 style={{ height: itemHeight }}
             />
 
-            {/* Gradient Masks */}
-            <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-background/90 to-transparent pointer-events-none z-20" />
-            <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-background/90 to-transparent pointer-events-none z-20" />
+            {/* Gradient Masks - Reduced opacity and size for clarity */}
+            <div className="absolute inset-x-0 top-0 h-[30%] bg-gradient-to-b from-background to-transparent pointer-events-none z-10 opacity-90" />
+            <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t from-background to-transparent pointer-events-none z-10 opacity-90" />
 
             <div
                 ref={containerRef}
                 onScroll={handleScroll}
-                className="h-full overflow-y-auto snap-y snap-mandatory scrollbar-hide no-scrollbar"
+                className="relative h-full overflow-y-auto snap-y snap-mandatory scrollbar-hide no-scrollbar z-20"
                 style={{
                     paddingTop: (height / 2) - (itemHeight / 2),
                     paddingBottom: (height / 2) - (itemHeight / 2)
@@ -100,11 +95,10 @@ export function WheelPicker({
                             key={option.value}
                             className={cn(
                                 "flex items-center justify-center snap-center transition-all duration-200 cursor-pointer select-none",
-                                isActive ? "text-primary font-bold scale-100 opacity-100" : "text-muted-foreground scale-90 opacity-40 hover:opacity-70"
+                                isActive ? "text-primary font-bold scale-100 opacity-100" : "text-muted-foreground/80 font-medium scale-100 opacity-50 hover:opacity-80"
                             )}
                             style={{ height: itemHeight }}
                             onClick={() => {
-                                // Scroll to this item on click
                                 if (containerRef.current) {
                                     containerRef.current.scrollTo({
                                         top: index * itemHeight,
