@@ -13,6 +13,7 @@ import { AddEventDialog } from "@/components/calendar/AddEventDialog";
 import { EventDetailModal } from "@/components/calendar/EventDetailModal";
 import type { TransformedEvent } from "@/types";
 import { EventList } from "@/components/calendar/EventList";
+import { WeeklyEventList } from "@/components/calendar/WeeklyEventList";
 import { ViewType } from "@/components/calendar/CalendarViewToggle";
 import { cn } from "@/lib/utils";
 
@@ -219,6 +220,7 @@ const DepartmentCalendarPage = () => {
                 // Props for Selection
                 isSelectMode={isSelectMode}
                 selectedEventIds={Array.from(selectedEventIds)}
+                presentationMode={presentationMode === 'list' ? 'detailed' : presentationMode}
               />
             )}
 
@@ -250,11 +252,19 @@ const DepartmentCalendarPage = () => {
           {/* List View (Only visible in 'list' mode) */}
           {presentationMode === "list" && (
             <div className="border-t border-border/40 pt-6">
-              <EventList
-                date={selectedDate}
-                events={selectedDateEvents}
-                onEventClick={handleEventClick}
-              />
+              {navigation.viewMode === 'week' ? (
+                <WeeklyEventList
+                  currentDate={navigation.currentDate}
+                  events={filteredEvents}
+                  onEventClick={handleEventClick}
+                />
+              ) : (
+                <EventList
+                  date={selectedDate}
+                  events={selectedDateEvents}
+                  onEventClick={handleEventClick}
+                />
+              )}
             </div>
           )}
         </div>

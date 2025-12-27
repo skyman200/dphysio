@@ -20,6 +20,8 @@ import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { EventDetailModal } from "@/components/calendar/EventDetailModal";
 import { AppleDateTimePicker } from "@/components/ui/AppleDateTimePicker";
 import { EventList } from "@/components/calendar/EventList";
+import { WeeklyEventList } from "@/components/calendar/WeeklyEventList";
+import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarViewToggle, ViewType } from "@/components/calendar/CalendarViewToggle";
 
 import { EVENT_CATEGORIES } from "@/types";
@@ -421,76 +423,22 @@ const ProfessorCalendarPage = () => {
             )}>
               {viewMode === "month" && (
                 <div className="h-full">
-                  {/* Weekday Headers */}
-                  <div className="grid grid-cols-7 border-b border-border/30 sticky top-0 bg-card z-10">
-                    {["월", "화", "수", "목", "금", "토", "일"].map((day, i) => (
-                      <div
-                        key={day}
-                        className={cn(
-                          "p-2 text-center text-xs font-medium",
-                          i === 5 && "text-primary",
-                          i === 6 && "text-destructive"
-                        )}
-                      >
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Calendar Days */}
-                  <div className="grid grid-cols-7">
-                    {calendarDays.map((day, idx) => {
-                      const dayEvents = getEventsForDay(day);
-                      const isCurrentMonth = isSameMonth(day, currentDate);
-                      const isCurrentDay = isSameDay(day, new Date());
-                      const isSelectedDay = isSameDay(day, selectedDate);
-
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => handleDayClick(day)}
-                          className={cn(
-                            "min-h-[80px] p-1 border-b border-r border-border/20 cursor-pointer transition-colors hover:bg-muted/30",
-                            !isCurrentMonth && "bg-muted/10 opacity-50",
-                            isCurrentDay && "bg-primary/5",
-                            (presentationMode === 'list' && isSelectedDay) && "bg-primary/10 ring-1 ring-inset ring-primary"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
-                              isCurrentDay && "bg-primary text-primary-foreground"
-                            )}
-                          >
-                            {format(day, "d")}
-                          </span>
-                          <div className="space-y-0.5 mt-0.5">
-                            {dayEvents.slice(0, 2).map((event) => (
-                              <div
-                                key={event.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedEvent(event);
-                                  setIsDetailModalOpen(true);
-                                }}
-                                className={cn(
-                                  "text-[10px] p-0.5 rounded text-white truncate cursor-pointer bg-gradient-to-r",
-                                  getProfessorColor(event.created_by)
-                                )}
-                              >
-                                {event.title}
-                              </div>
-                            ))}
-                            {dayEvents.length > 2 && (
-                              <div className="text-[10px] text-muted-foreground">
-                                +{dayEvents.length - 2}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <CalendarMonthView
+                    currentDate={currentDate}
+                    filteredEvents={selectedEvents as TransformedEvent[]}
+                    isDragging={false}
+                    isInDragRange={() => false}
+                    onMouseDown={() => { }}
+                    onMouseEnter={() => { }}
+                    onMouseUp={() => { }}
+                    onMouseLeave={() => { }}
+                    onDayClick={handleDayClick}
+                    onEventClick={(event) => {
+                      setSelectedEvent(event);
+                      setIsDetailModalOpen(true);
+                    }}
+                    presentationMode={presentationMode === 'list' ? 'detailed' : presentationMode}
+                  />
                 </div>
               )}
 
@@ -524,14 +472,25 @@ const ProfessorCalendarPage = () => {
             {/* List View Area */}
             {presentationMode === "list" && (
               <div className="h-[50%] border-t border-border/30 overflow-y-auto bg-background/50 backdrop-blur-sm p-4">
-                <EventList
-                  date={selectedDate}
-                  events={selectedDateEvents as TransformedEvent[]}
-                  onEventClick={(event) => {
-                    setSelectedEvent(event);
-                    setIsDetailModalOpen(true);
-                  }}
-                />
+                {viewMode === 'week' ? (
+                  <WeeklyEventList
+                    currentDate={currentDate}
+                    events={selectedEvents as TransformedEvent[]}
+                    onEventClick={(event) => {
+                      setSelectedEvent(event);
+                      setIsDetailModalOpen(true);
+                    }}
+                  />
+                ) : (
+                  <EventList
+                    date={selectedDate}
+                    events={selectedDateEvents as TransformedEvent[]}
+                    onEventClick={(event) => {
+                      setSelectedEvent(event);
+                      setIsDetailModalOpen(true);
+                    }}
+                  />
+                )}
               </div>
             )}
 

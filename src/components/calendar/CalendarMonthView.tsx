@@ -17,6 +17,7 @@ interface CalendarMonthViewProps {
     onEventClick: (event: TransformedEvent) => void;
     isSelectMode?: boolean;
     selectedEventIds?: string[];
+    presentationMode?: 'detailed' | 'compact' | 'stack';
 }
 
 export function CalendarMonthView({
@@ -32,6 +33,7 @@ export function CalendarMonthView({
     onEventClick,
     isSelectMode = false,
     selectedEventIds = [],
+    presentationMode = 'detailed',
 }: CalendarMonthViewProps) {
     // Get weeks for month view
     const weeksInMonth = useMemo(() => {
@@ -216,56 +218,119 @@ export function CalendarMonthView({
                             </div>
 
                             {/* Events Layer */}
-                            <div className="relative z-10 mt-[28px] grid grid-cols-7 gap-y-1 px-1 pointer-events-none" style={{ minHeight: '80px' }}>
-                                {weekEvents.map((event) => {
-                                    if (event.rowIndex > 4) return null;
+                            <div className="relative z-10 grid grid-cols-7 gap-y-1 px-1 pointer-events-none"
+                                style={{
+                                    minHeight: presentationMode === 'compact' ? '40px' : '80px',
+                                    marginTop: presentationMode === 'compact' ? '0px' : '28px'
+                                }}
+                            >
+                                {presentationMode === 'compact' ? (
+                                    // Compact View: Render dots at the bottom of the cell
+                                    week.map((day, dayIdx) => {
+                                        const dayEvents = weekEvents.filter(e => {
+                                            const start = new Date(e.start_date);
+                                            const end = e.end_date ? new Date(e.end_date) : start;
+                                            return start <= day && end >= day && isSameDay(day, start); // Only dot on start day? Or every day? User said "color dot". Usually every day event exists.
+                                            // Actually user said "일정에 색깔 dot를 찍게 해주고".
+                                            // Should be dot for each event on that day.
+                                        });
 
-                                    const isSelected = selectedEventIds.includes(event.id);
-                                    const barStyle = getMultiDayEventStyle(event);
-                                    const bgColor = getMultiDayEventBgColor(event);
-                                    const isSingleDay = !event.isMultiDay;
+                                        // Filter events that actually span this day
+                                        const eventsOnDay = weekEvents.filter(e => {
+                                            const start = startOfDay(new Date(e.start_date));
+                                            const end = e.end_date ? startOfDay(new Date(e.end_date)) : start;
+                                            const current = startOfDay(day);
+                                            return current >= start && current <= end;
+                                        });
 
-                                    const finalStyle = isSingleDay
-                                        ? cn("text-xs px-1 py-0.5 truncate cursor-pointer hover:scale-105 transition-all font-medium pointer-events-auto rounded mb-0.5 text-foreground bg-transparent border-l-2",
-                                            getUserChipStyle(event.created_by),
-                                            isSelectMode && isSelected && "ring-2 ring-primary ring-offset-1 bg-primary/10"
-                                        )
-                                        : cn(
-                                            "text-xs px-2 py-0.5 truncate cursor-pointer hover:brightness-110 transition-all shadow-sm font-medium pointer-events-auto rounded-md mb-0.5 text-white",
-                                            event.isContinuedBefore && "rounded-l-none mx-0 border-l border-white/20",
-                                            event.isContinuedAfter && "rounded-r-none mx-0 border-r border-white/20",
-                                            barStyle,
-                                            isSelectMode && isSelected && "ring-2 ring-primary ring-offset-1"
+                                        if (eventsOnDay.length === 0) return null;
+
+                                        return (
+                                            <div key={dayIdx} className="col-start-[auto] row-start-1 flex justify-center items-end h-full pb-1 gap-0.5" style={{ gridColumnStart: dayIdx + 1 }}>
+                                                {eventsOnDay.slice(0, 5).map(event => (
+                                                    <div
+                                                        key={`${event.id}-${dayIdx}`}
+                                                        className={cn(
+                                                            "w-1.5 h-1.5 rounded-full",
+                                                            getMultiDayEventStyle(event)?.replace('bg-', 'bg-') || "bg-primary" // Ensure bg color
+                                                        )}
+                                                    />
+                                                ))}
+                                                {eventsOnDay.length > 5 && <span className="text-[8px] text-muted-foreground">+</span>}
+                                            </div>
                                         );
+                                    })
+                                ) : (
+                                    // Detailed & Stack View
+                                    weekEvents.map((event) => {
+                                        // For stack view, show more events by reducing height and hiding title
+                                        const isStack = presentationMode === 'stack';
+                                        if (!isStack && event.rowIndex > 4) return null; // Detailed limit
+                                        if (isStack && event.rowIndex > 10) return null; // Stack limit (higher)
 
-                                    return (
-                                        <div
-                                            key={`${event.id}-${weekIdx}-${event.rowIndex}`}
-                                            className={finalStyle}
-                                            style={{
-                                                gridColumnStart: event.startOffset + 1,
-                                                gridColumnEnd: `span ${event.span}`,
-                                                gridRowStart: event.rowIndex + 1,
-                                                marginBottom: '2px',
-                                                backgroundColor: !isSingleDay ? bgColor : undefined,
-                                            }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onEventClick(event);
-                                            }}
-                                        >
-                                            <span className={cn("truncate flex items-center gap-1", !isSingleDay && "justify-center w-full")}>
-                                                {isSelectMode && (
-                                                    <div className={`w-3 h-3 rounded-full border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary border-primary' : 'bg-white border-gray-300'}`}>
-                                                        {isSelected && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                                                    </div>
+                                        const isSelected = selectedEventIds.includes(event.id);
+                                        const barStyle = getMultiDayEventStyle(event);
+                                        const bgColor = getMultiDayEventBgColor(event);
+                                        const isSingleDay = !event.isMultiDay;
+
+                                        const stackStyle = isStack
+                                            ? "h-1.5 mb-0.5 hover:h-4 transition-all"
+                                            : "text-xs px-2 py-0.5 mb-0.5";
+
+                                        const finalStyle = isSingleDay
+                                            ? cn(
+                                                "truncate cursor-pointer hover:scale-105 transition-all font-medium pointer-events-auto rounded text-foreground bg-transparent",
+                                                !isStack && "border-l-2 px-1 py-0.5",
+                                                isStack && "h-1.5 w-1.5 rounded-full mx-auto mb-0.5", // Stack single day -> dot? Or bar?
+                                                // User said "스택처럼 그 날짜에 색깔을 달리해서 쌓이게"
+                                                // Let's make single day also a bar in stack mode for consistency? Or dot.
+                                                // If stack mode, single day events should ideally stack too.
+                                                // Let's use bar for all in stack mode.
+                                                isStack && "w-full h-1.5 mb-0.5 rounded-sm",
+                                                getUserChipStyle(event.created_by),
+                                                isSelectMode && isSelected && "ring-2 ring-primary ring-offset-1 bg-primary/10",
+                                                isStack && (barStyle || "bg-primary") // Force bg in stack
+                                            )
+                                            : cn(
+                                                "truncate cursor-pointer hover:brightness-110 transition-all shadow-sm font-medium pointer-events-auto rounded-md text-white",
+                                                event.isContinuedBefore && "rounded-l-none mx-0 border-l border-white/20",
+                                                event.isContinuedAfter && "rounded-r-none mx-0 border-r border-white/20",
+                                                stackStyle,
+                                                barStyle,
+                                                isSelectMode && isSelected && "ring-2 ring-primary ring-offset-1"
+                                            );
+
+                                        return (
+                                            <div
+                                                key={`${event.id}-${weekIdx}-${event.rowIndex}`}
+                                                className={finalStyle}
+                                                style={{
+                                                    gridColumnStart: event.startOffset + 1,
+                                                    gridColumnEnd: `span ${event.span}`,
+                                                    gridRowStart: event.rowIndex + 1,
+                                                    backgroundColor: (!isSingleDay || isStack) ? bgColor : undefined,
+                                                }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEventClick(event);
+                                                }}
+                                                title={event.title}
+                                            >
+                                                {!isStack && (
+                                                    <span className={cn("truncate flex items-center gap-1", !isSingleDay && "justify-center w-full")}>
+                                                        {isSelectMode && (
+                                                            <div className={`w-3 h-3 rounded-full border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary border-primary' : 'bg-white border-gray-300'}`}>
+                                                                {isSelected && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                                            </div>
+                                                        )}
+                                                        {(event.source === 'caldav' || event.type === 'caldav') && <span className="text-[10px]">🍎</span>}
+                                                        {event.title}
+                                                    </span>
                                                 )}
-                                                {(event.source === 'caldav' || event.type === 'caldav') && <span className="text-[10px]">🍎</span>}
-                                                {event.title}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
                     );
