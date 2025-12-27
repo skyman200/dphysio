@@ -2,15 +2,13 @@ import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEvents } from "@/hooks/useEvents";
 import { useProfiles } from "@/hooks/useProfiles";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { Users, Calendar, FileText, Plus, Search, Trash2, Pencil } from "lucide-react";
+import { Users, Calendar, Plus, Search, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -31,16 +29,19 @@ const PROFESSOR_COLORS = [
 ];
 
 const MeetingsPage = () => {
-  const { events, addEvent, updateEvent, deleteEvent } = useEvents(); // Added updateEvent, deleteEvent
+  const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { profiles } = useProfiles();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null); // Added editingId
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newMeeting, setNewMeeting] = useState({
     title: "",
     date: "",
     time: "14:00",
+    endDate: "",
+    endTime: "15:00",
+    isAllDay: false,
     location: "",
     description: "",
   });
@@ -79,209 +80,212 @@ const MeetingsPage = () => {
 
     setLoading(true);
 
+    const startDateTimeStr = newMeeting.isAllDay
+      ? `${newMeeting.date}T00:00:00`
+      : `${newMeeting.date}T${newMeeting.time}`;
+
+    const endDateStr = newMeeting.endDate || newMeeting.date;
+    const endDateTimeStr = newMeeting.isAllDay
+      ? `${endDateStr}T23:59:59`
+      : `${endDateStr}T${newMeeting.endTime || newMeeting.time}`;
+
+    const eventData = {
+      title: newMeeting.title,
+      start_date: new Date(startDateTimeStr),
+      end_date: new Date(endDateTimeStr),
+      location: newMeeting.location || null,
+      description: newMeeting.description || null,
+      category: "meeting",
+      type: "department",
+    };
+
     if (editingId) {
       // UPDATE Existing
-      const dateTimeStr = `${newMeeting.date}T${newMeeting.time}`;
-      const { error } = await updateEvent(editingId, {
-        title: newMeeting.title,
-        start_date: new Date(dateTimeStr),
-        location: newMeeting.location || null,
-        description: newMeeting.description || null,
-      });
+      const { error: updateError } = await updateEvent(editingId, eventData);
 
-      if (error) {
+      if (updateError) {
         toast({ title: "오류", description: "수정 실패", variant: "destructive" });
       } else {
         toast({ title: "수정 완료", description: "회의가 수정되었습니다." });
         setDialogOpen(false);
-        setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
+        setNewMeeting({
+          title: "", date: "", time: "14:00",
+          endDate: "", endTime: "15:00", isAllDay: false,
+          location: "", description: ""
+        });
         setEditingId(null);
       }
     } else {
       // CREATE New
-      const dateTimeStr = `${newMeeting.date}T${newMeeting.time}`;
-      const { error } = await addEvent({
-        title: newMeeting.title,
-        start_date: new Date(dateTimeStr),
-        location: newMeeting.location || undefined,
-        description: newMeeting.description || undefined,
-        category: "meeting",
-        type: "department",
-      });
+      const { error: addError } = await addEvent(eventData);
 
-      if (error) {
-        toast({
-          title: "오류",
-          description: "회의를 추가하지 못했습니다.",
-          variant: "destructive",
-        });
+      if (addError) {
+        toast({ title: "오류", description: "추가 실패", variant: "destructive" });
       } else {
-        toast({
-          title: "회의 추가됨",
-          description: "새로운 회의가 추가되었습니다.",
-        });
-        setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
+        toast({ title: "추가 완료", description: "새 회의가 추가되었습니다." });
         setDialogOpen(false);
+        setNewMeeting({
+          title: "", date: "", time: "14:00",
+          endDate: "", endTime: "15:00", isAllDay: false,
+          location: "", description: ""
+        });
       }
     }
     setLoading(false);
   };
 
+  const handleEditMeeting = (meeting: any) => {
+    setEditingId(meeting.id);
+    const startDate = new Date(meeting.start_date);
+    const endDate = meeting.end_date ? new Date(meeting.end_date) : new Date(startDate.getTime() + 60 * 60 * 1000);
+
+    setNewMeeting({
+      title: meeting.title,
+      date: format(startDate, "yyyy-MM-dd"),
+      time: format(startDate, "HH:mm"),
+      endDate: format(endDate, "yyyy-MM-dd"),
+      endTime: format(endDate, "HH:mm"),
+      isAllDay: false,
+      location: meeting.location || "",
+      description: meeting.description || "",
+    });
+    setDialogOpen(true);
+  };
+
   return (
-    <MainLayout title="회의·위원회">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+    <MainLayout>
+      <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold">회의·위원회</h2>
-            <p className="text-muted-foreground">
-              학과 회의 및 위원회 일정을 관리합니다
+            <h1 className="text-4xl font-display font-medium text-foreground">
+              학과 회의 <span className="text-primary">.Meeting</span>
+            </h1>
+            <p className="text-muted-foreground mt-2 font-light">
+              학과 및 교수 회의 일정을 관리합니다.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="회의 검색..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-[200px]"
-              />
-            </div>
-            <Button className="gap-2" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
-              회의 추가
-            </Button>
-          </div>
+          <Button
+            onClick={() => {
+              setEditingId(null);
+              setNewMeeting({
+                title: "", date: format(new Date(), "yyyy-MM-dd"), time: "14:00",
+                endDate: format(new Date(), "yyyy-MM-dd"), endTime: "15:00", isAllDay: false,
+                location: "", description: ""
+              });
+              setDialogOpen(true);
+            }}
+            className="btn-elegant shadow-lg hover:shadow-xl"
+          >
+            <Plus className="mr-2 h-4 w-4" /> 새 회의 추가
+          </Button>
         </div>
 
-        {/* Meeting List */}
-        <div className="grid gap-4">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="회의 검색..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 h-12 bg-white/50 backdrop-blur-sm border-0 focus-visible:ring-1 focus-visible:ring-primary/50 text-base"
+          />
+        </div>
+
+        {/* Meetings List */}
+        <div className="space-y-4">
           {filteredMeetings.length === 0 ? (
-            <div className="glass-card rounded-2xl p-12 text-center">
-              <Users className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-muted-foreground">
-                회의 일정이 없습니다
-              </h3>
-              <p className="text-sm text-muted-foreground/70 mt-2">
-                새 회의를 추가하거나 일정에서 '회의' 유형으로 등록해주세요
-              </p>
+            <div className="text-center py-20 text-muted-foreground font-light">
+              예정된 회의가 없습니다.
             </div>
           ) : (
-            filteredMeetings.map((meeting, idx) => {
-              const creator = getProfessorInfo(meeting.created_by);
-              return (
-                <motion.div
-                  key={meeting.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="glass-card rounded-2xl p-5 hover:scale-[1.01] transition-transform cursor-pointer"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-professor-burgundy/20 to-professor-burgundy/10 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-professor-burgundy">
-                        {format(parseISO(meeting.start_date), "d")}
-                      </span>
-                      <span className="text-xs text-professor-burgundy/70">
-                        {format(parseISO(meeting.start_date), "MMM", { locale: ko })}
-                      </span>
+            filteredMeetings.map((meeting) => (
+              <motion.div
+                layout
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                key={meeting.id}
+                className="group relative bg-white/40 backdrop-blur-md rounded-2xl p-6 border border-white/60 shadow-sm hover:shadow-md transition-all duration-300"
+              >
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* Date Badge */}
+                  <div className="flex-shrink-0 flex flex-col items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 text-primary">
+                    <span className="text-xs font-medium uppercase tracking-wider">
+                      {format(new Date(meeting.start_date), "MMM")}
+                    </span>
+                    <span className="text-2xl font-display font-medium">
+                      {format(new Date(meeting.start_date), "dd")}
+                    </span>
+                    <span className="text-xs opacity-70">
+                      {format(new Date(meeting.start_date), "EEE", { locale: ko })}
+                    </span>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-grow space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <h3 className="text-xl font-medium text-foreground group-hover:text-primary transition-colors">
+                        {meeting.title}
+                      </h3>
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          onClick={() => handleEditMeeting(meeting)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={async () => {
+                            if (confirm('정말 삭제하시겠습니까?')) {
+                              await deleteEvent(meeting.id);
+                              toast({ title: "삭제 완료", description: "회의가 삭제되었습니다." });
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-foreground">
-                            {meeting.title}
-                          </h3>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3.5 w-3.5" />
-                              {format(parseISO(meeting.start_date), "a h:mm", { locale: ko })}
-                            </span>
-                            {meeting.location && (
-                              <span>• {meeting.location}</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <Badge variant="outline" className="flex-shrink-0">
-                          회의
-                        </Badge>
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-primary/70" />
+                        {format(new Date(meeting.start_date), "a h:mm", { locale: ko })}
+                        {meeting.end_date && ` - ${format(new Date(meeting.end_date), "a h:mm", { locale: ko })}`}
                       </div>
-
-                      {meeting.description && (
-                        <p className="mt-3 text-sm text-muted-foreground line-clamp-2">
-                          {meeting.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-3 mt-4">
+                      {meeting.location && (
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback
-                              className={cn(
-                                "text-white text-xs font-medium bg-gradient-to-br",
-                                creator.color
-                              )}
-                            >
-                              {creator.name[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs text-muted-foreground">
-                            {creator.name}
-                          </span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+                          {meeting.location}
                         </div>
+                      )}
+                    </div>
 
-                        <div className="ml-auto flex items-center gap-1">
-                          {/* Edit/Delete for Creator or Admin */}
-                          <div className="flex gap-1 mr-2 border-r pr-2 border-border/50">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const meetingDate = parseISO(meeting.start_date);
-                                setNewMeeting({
-                                  title: meeting.title,
-                                  date: format(meetingDate, "yyyy-MM-dd"),
-                                  time: format(meetingDate, "HH:mm"),
-                                  location: meeting.location || "",
-                                  description: meeting.description || ""
-                                });
-                                setEditingId(meeting.id);
-                                setDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (confirm('이 회의를 삭제하시겠습니까?')) {
-                                  await deleteEvent(meeting.id);
-                                  toast({ title: "삭제됨", description: "회의가 삭제되었습니다." });
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                            </Button>
-                          </div>
-                          <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
-                            <FileText className="h-3.5 w-3.5" />
-                            상세보기
-                          </Button>
-                        </div>
-                      </div>
+                    {meeting.description && (
+                      <p className="text-sm text-muted-foreground/80 leading-relaxed font-light">
+                        {meeting.description}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-2">
+                      <Avatar className="h-6 w-6 ring-2 ring-background">
+                        <AvatarFallback className={cn("text-[10px] text-white", getProfessorInfo(meeting.created_by).color)}>
+                          {getProfessorInfo(meeting.created_by).name.slice(0, 1)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs text-muted-foreground">
+                        작성자: {getProfessorInfo(meeting.created_by).name}
+                      </span>
                     </div>
                   </div>
-                </motion.div>
-              );
-            })
+                </div>
+              </motion.div>
+            ))
           )}
         </div>
       </div>
@@ -291,7 +295,11 @@ const MeetingsPage = () => {
         setDialogOpen(open);
         if (!open) {
           setEditingId(null);
-          setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
+          setNewMeeting({
+            title: "", date: format(new Date(), "yyyy-MM-dd"), time: "14:00",
+            endDate: format(new Date(), "yyyy-MM-dd"), endTime: "15:00", isAllDay: false,
+            location: "", description: ""
+          });
         }
       }}>
         <DialogContent className="glass rounded-2xl border-0 sm:max-w-md max-h-[90vh] overflow-y-auto">

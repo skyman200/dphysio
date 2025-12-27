@@ -1,362 +1,255 @@
-import { useState, useRef, useEffect } from "react";
-import { format, addMonths, subMonths, setHours, setMinutes, addHours } from "date-fns";
+import { useState, useEffect } from "react";
+import { format, addMonths, subMonths, parseISO, addMinutes, setHours, setMinutes } from "date-fns";
 import { ko } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WheelPicker } from "./WheelPicker";
 import { Switch } from "@/components/ui/switch";
 
 interface AppleDateTimePickerProps {
-    startDate: Date;
-    endDate: Date;
-    onStartDateChange: (date: Date) => void;
-    onEndDateChange: (date: Date) => void;
-    showAllDay?: boolean;
-    isAllDay?: boolean;
-    onAllDayChange?: (allDay: boolean) => void;
+    date: string;
+    time: string;
+    endDate: string;
+    endTime: string;
+    isAllDay: boolean;
+    onAllDayChange: (checked: boolean) => void;
+    onUpdate: (field: "date" | "time" | "endDate" | "endTime", value: string) => void;
 }
 
+const HOURS = Array.from({ length: 12 }, (_, i) => ({
+    value: (i + 1).toString(),
+    label: (i + 1).toString()
+}));
+
+const MINUTES = Array.from({ length: 12 }, (_, i) => ({
+    value: (i * 5).toString().padStart(2, "0"),
+    label: (i * 5).toString().padStart(2, "0")
+}));
+
+const PERIODS = [
+    { value: "AM", label: "오전" },
+    { value: "PM", label: "오후" }
+];
+
 export function AppleDateTimePicker({
-    startDate,
+    date,
+    time,
     endDate,
-    onStartDateChange,
-    onEndDateChange,
-    showAllDay = true,
-    isAllDay = false,
+    endTime,
+    isAllDay,
     onAllDayChange,
+    onUpdate,
 }: AppleDateTimePickerProps) {
-    const [expandedSection, setExpandedSection] = useState<"startDate" | "startTime" | "endDate" | "endTime" | null>(null);
-    const [viewMonth, setViewMonth] = useState(startDate);
+    const [expandedSection, setExpandedSection] = useState<"start" | "end" | null>(null);
+    const [viewMonth, setViewMonth] = useState(date ? parseISO(date) : new Date());
 
-    const hours = Array.from({ length: 12 }, (_, i) => i + 1);
-    const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
-    const periods = ["오전", "오후"];
-
-    const handleDateSelect = (day: number, isStart: boolean) => {
-        const newDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
-        if (isStart) {
-            const newStart = setHours(setMinutes(newDate, startDate.getMinutes()), startDate.getHours());
-            onStartDateChange(newStart);
-            // Auto-adjust end if needed
-            if (newStart > endDate) {
-                onEndDateChange(addHours(newStart, 1));
-            }
-        } else {
-            const newEnd = setHours(setMinutes(newDate, endDate.getMinutes()), endDate.getHours());
-            if (newEnd >= startDate) {
-                onEndDateChange(newEnd);
-            }
-        }
-        setExpandedSection(null);
+    // Helper to parse time string "HH:mm" to parts
+    const parseTime = (timeStr: string) => {
+        if (!timeStr) return { period: "AM", hour: "12", minute: "00" };
+        const [h, m] = timeStr.split(":").map(Number);
+        const period = h >= 12 ? "PM" : "AM";
+        const hour = h % 12 === 0 ? 12 : h % 12;
+        // Snap minute to nearest 5
+        const minute = Math.round(m / 5) * 5;
+        return {
+            period,
+            hour: hour.toString(),
+            minute: (minute === 60 ? 0 : minute).toString().padStart(2, "0")
+        };
     };
 
-    const handleTimeChange = (isStart: boolean, hour: number, minute: number, period: string) => {
-        const hour24 = period === "오후" ? (hour === 12 ? 12 : hour + 12) : (hour === 12 ? 0 : hour);
-        if (isStart) {
-            const newStart = setHours(setMinutes(startDate, minute), hour24);
-            onStartDateChange(newStart);
-            if (newStart >= endDate) {
-                onEndDateChange(addHours(newStart, 1));
-            }
-        } else {
-            const newEnd = setHours(setMinutes(endDate, minute), hour24);
-            onEndDateChange(newEnd);
-        }
+    // Helper to construct "HH:mm" from parts
+    const constructTime = (period: string, hour: string, minute: string) => {
+        let h = parseInt(hour);
+        if (period === "PM" && h !== 12) h += 12;
+        if (period === "AM" && h === 12) h = 0;
+        return `${h.toString().padStart(2, "0")}:${minute}`;
     };
 
-    const getDaysInMonth = (date: Date) => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
+    const getDaysInMonth = (currentDate: Date) => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
         const firstDay = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         return { firstDay, daysInMonth };
     };
 
+    const handleDateSelect = (day: number, isStart: boolean) => {
+        const selectedDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
+        const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+        if (isStart) {
+            onUpdate("date", dateStr);
+            // If start date is after end date, move end date
+            if (endDate && dateStr > endDate) {
+                onUpdate("endDate", dateStr);
+            }
+        } else {
+            onUpdate("endDate", dateStr);
+        }
+    };
+
     const { firstDay, daysInMonth } = getDaysInMonth(viewMonth);
 
-    const formatTime = (date: Date) => {
-        const hour = date.getHours();
-        const minute = date.getMinutes();
-        const period = hour >= 12 ? "오후" : "오전";
-        const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-        return `${period} ${hour12}:${minute.toString().padStart(2, "0")}`;
+    const formatDisplayDate = (dateStr: string, timeStr: string) => {
+        if (!dateStr) return "날짜 선택";
+        const datePart = format(parseISO(dateStr), "yyyy. M. d.", { locale: ko });
+        if (isAllDay) return datePart;
+
+        const { period, hour, minute } = parseTime(timeStr);
+        const periodLabel = period === "AM" ? "오전" : "오후";
+        return `${datePart} ${periodLabel} ${hour}:${minute}`;
     };
 
-    const getHour12 = (date: Date) => {
-        const hour = date.getHours();
-        return hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    };
+    const renderExpandedContent = (isStart: boolean) => {
+        const currentDateStr = isStart ? date : endDate;
+        const currentTimeStr = isStart ? time : endTime;
+        const { period, hour, minute } = parseTime(currentTimeStr);
 
-    const getPeriod = (date: Date) => date.getHours() >= 12 ? "오후" : "오전";
+        const updateTime = (p: string, h: string, m: string) => {
+            const newTime = constructTime(p, h, m);
+            onUpdate(isStart ? "time" : "endTime", newTime);
+        };
 
-    return (
-        <div className="bg-zinc-800/50 rounded-2xl overflow-hidden">
-            {/* All Day Toggle */}
-            {showAllDay && (
-                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/50">
-                    <span className="text-sm font-medium">하루 종일</span>
-                    <Switch
-                        checked={isAllDay}
-                        onCheckedChange={onAllDayChange}
-                    />
-                </div>
-            )}
-
-            {/* Start Date/Time */}
-            <div className="border-b border-zinc-700/50">
-                <div className="flex items-center px-4 py-3">
-                    <span className="text-sm text-muted-foreground w-12">시작</span>
-                    <button
-                        onClick={() => setExpandedSection(expandedSection === "startDate" ? null : "startDate")}
-                        className={cn(
-                            "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                            expandedSection === "startDate" ? "bg-red-500/20 text-red-400" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                        )}
-                    >
-                        {format(startDate, "yyyy. M. d.", { locale: ko })}
-                    </button>
-                    {!isAllDay && (
-                        <button
-                            onClick={() => setExpandedSection(expandedSection === "startTime" ? null : "startTime")}
-                            className={cn(
-                                "ml-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                                expandedSection === "startTime" ? "bg-red-500/20 text-red-400" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                            )}
-                        >
-                            {formatTime(startDate)}
+        return (
+            <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                {/* Calendar Header */}
+                <div className="flex items-center justify-between mb-4 pt-2">
+                    <span className="text-sm font-semibold text-foreground ml-1">
+                        {format(viewMonth, "yyyy년 M월", { locale: ko })}
+                    </span>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setViewMonth(subMonths(viewMonth, 1))} className="p-1 hover:bg-muted rounded-full transition-colors text-primary">
+                            <ChevronLeft className="h-5 w-5" />
                         </button>
-                    )}
+                        <button type="button" onClick={() => setViewMonth(addMonths(viewMonth, 1))} className="p-1 hover:bg-muted rounded-full transition-colors text-primary">
+                            <ChevronRight className="h-5 w-5" />
+                        </button>
+                    </div>
                 </div>
 
-                {/* Inline Calendar for Start */}
-                {expandedSection === "startDate" && (
-                    <div className="px-4 pb-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <button onClick={() => setViewMonth(viewMonth)} className="text-sm font-semibold text-red-400">
-                                {format(viewMonth, "yyyy년 M월", { locale: ko })}
-                            </button>
-                            <div className="flex gap-4">
-                                <button onClick={() => setViewMonth(subMonths(viewMonth, 1))} className="text-red-400 hover:text-red-300">
-                                    <ChevronLeft className="h-5 w-5" />
-                                </button>
-                                <button onClick={() => setViewMonth(addMonths(viewMonth, 1))} className="text-red-400 hover:text-red-300">
-                                    <ChevronRight className="h-5 w-5" />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground mb-2">
-                            {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-                                <div key={d} className="py-1">{d}</div>
-                            ))}
-                        </div>
-                        <div className="grid grid-cols-7 gap-1 text-center text-sm">
-                            {Array.from({ length: firstDay }).map((_, i) => (
-                                <div key={`empty-${i}`} />
-                            ))}
-                            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                                const isSelected = startDate.getDate() === day &&
-                                    startDate.getMonth() === viewMonth.getMonth() &&
-                                    startDate.getFullYear() === viewMonth.getFullYear();
-                                const isToday = new Date().getDate() === day &&
-                                    new Date().getMonth() === viewMonth.getMonth() &&
-                                    new Date().getFullYear() === viewMonth.getFullYear();
-                                return (
-                                    <button
-                                        key={day}
-                                        onClick={() => handleDateSelect(day, true)}
-                                        className={cn(
-                                            "w-9 h-9 rounded-full flex items-center justify-center transition-colors",
-                                            isSelected && "bg-red-500 text-white",
-                                            isToday && !isSelected && "text-red-400",
-                                            !isSelected && !isToday && "hover:bg-zinc-700/50"
-                                        )}
-                                    >
-                                        {day}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-y-2 gap-x-1 text-center mb-6">
+                    {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+                        <div key={d} className={cn("text-xs font-medium", i === 0 ? "text-destructive" : "text-muted-foreground")}>{d}</div>
+                    ))}
 
-                {/* Inline Time Picker for Start */}
-                {expandedSection === "startTime" && (
-                    <div className="px-4 pb-4">
-                        <div className="flex justify-center gap-2">
-                            {/* Period */}
-                            <div className="flex flex-col h-32 overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-                                {periods.map((p) => (
-                                    <button
-                                        key={p}
-                                        onClick={() => handleTimeChange(true, getHour12(startDate), startDate.getMinutes(), p)}
-                                        className={cn(
-                                            "px-4 py-2 text-sm snap-center",
-                                            getPeriod(startDate) === p ? "bg-zinc-600/80 rounded-lg font-semibold" : "text-muted-foreground"
-                                        )}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
-                            </div>
-                            {/* Hour */}
-                            <div className="flex flex-col h-32 overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-                                {hours.map((h) => (
-                                    <button
-                                        key={h}
-                                        onClick={() => handleTimeChange(true, h, startDate.getMinutes(), getPeriod(startDate))}
-                                        className={cn(
-                                            "px-4 py-2 text-sm snap-center",
-                                            getHour12(startDate) === h ? "bg-zinc-600/80 rounded-lg font-semibold" : "text-muted-foreground"
-                                        )}
-                                    >
-                                        {h}
-                                    </button>
-                                ))}
-                            </div>
-                            {/* Minute */}
-                            <div className="flex flex-col h-32 overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-                                {minutes.map((m) => (
-                                    <button
-                                        key={m}
-                                        onClick={() => handleTimeChange(true, getHour12(startDate), parseInt(m), getPeriod(startDate))}
-                                        className={cn(
-                                            "px-4 py-2 text-sm snap-center",
-                                            startDate.getMinutes() === parseInt(m) ? "bg-zinc-600/80 rounded-lg font-semibold" : "text-muted-foreground"
-                                        )}
-                                    >
-                                        {m}
-                                    </button>
-                                ))}
-                            </div>
+                    {Array.from({ length: firstDay }).map((_, i) => (
+                        <div key={`empty-${i}`} />
+                    ))}
+
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                        const d = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
+                        const dStr = format(d, "yyyy-MM-dd");
+                        const isSelected = currentDateStr === dStr;
+                        const isToday = format(new Date(), "yyyy-MM-dd") === dStr;
+
+                        return (
+                            <button
+                                type="button"
+                                key={day}
+                                onClick={() => handleDateSelect(day, isStart)}
+                                className={cn(
+                                    "h-9 w-9 rounded-full flex items-center justify-center text-sm transition-all duration-200",
+                                    isSelected ? "bg-primary text-primary-foreground font-semibold shadow-md scale-105" : "hover:bg-muted text-foreground",
+                                    isToday && !isSelected && "text-primary font-bold ring-1 ring-primary/30"
+                                )}
+                            >
+                                {day}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Time Wheel Picker (Only if not All Day) */}
+                {!isAllDay && (
+                    <div className="mt-4 pt-4 border-t border-border/40">
+                        <div className="grid grid-cols-3 gap-0 relative h-[160px]">
+                            {/* Selection Overlay handled inside WheelPicker, but we can add global one if needed. 
+                             WheelPicker has its own mask. */}
+
+                            <WheelPicker
+                                options={PERIODS}
+                                value={period}
+                                onChange={(v) => updateTime(v, hour, minute)}
+                                height={160}
+                                className="w-full"
+                            />
+                            <WheelPicker
+                                options={HOURS}
+                                value={hour} // Already string 1-12
+                                onChange={(v) => updateTime(period, v, minute)}
+                                height={160}
+                                className="w-full"
+                            />
+                            <WheelPicker
+                                options={MINUTES}
+                                value={minute}
+                                onChange={(v) => updateTime(period, hour, v)}
+                                height={160}
+                                className="w-full"
+                            />
                         </div>
                     </div>
                 )}
             </div>
+        );
+    };
+
+    return (
+        <div className="bg-muted/30 rounded-2xl overflow-hidden border border-border/50 shadow-sm">
+            {/* All Day Toggle */}
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-border/40 bg-card/40 backdrop-blur-sm">
+                <span className="text-[15px] font-medium text-foreground">하루 종일</span>
+                <Switch
+                    checked={isAllDay}
+                    onCheckedChange={onAllDayChange}
+                    className="scale-90"
+                />
+            </div>
+
+            {/* Start Date/Time */}
+            <div className="border-b border-border/40 bg-card/20">
+                <button
+                    type="button"
+                    onClick={() => setExpandedSection(expandedSection === "start" ? null : "start")}
+                    className={cn(
+                        "w-full flex items-center justify-between px-4 py-3.5 transition-colors",
+                        expandedSection === "start" ? "bg-muted/50" : "hover:bg-muted/30"
+                    )}
+                >
+                    <span className="text-[15px] font-medium text-foreground">시작</span>
+                    <span className={cn(
+                        "text-[15px] transition-colors",
+                        expandedSection === "start" ? "text-primary font-semibold" : "text-muted-foreground"
+                    )}>
+                        {formatDisplayDate(date, time)}
+                    </span>
+                </button>
+
+                {expandedSection === "start" && renderExpandedContent(true)}
+            </div>
 
             {/* End Date/Time */}
-            <div>
-                <div className="flex items-center px-4 py-3">
-                    <span className="text-sm text-muted-foreground w-12">종료</span>
-                    <button
-                        onClick={() => setExpandedSection(expandedSection === "endDate" ? null : "endDate")}
-                        className={cn(
-                            "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                            expandedSection === "endDate" ? "bg-red-500/20 text-red-400" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                        )}
-                    >
-                        {format(endDate, "yyyy. M. d.", { locale: ko })}
-                    </button>
-                    {!isAllDay && (
-                        <button
-                            onClick={() => setExpandedSection(expandedSection === "endTime" ? null : "endTime")}
-                            className={cn(
-                                "ml-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                                expandedSection === "endTime" ? "bg-red-500/20 text-red-400" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                            )}
-                        >
-                            {formatTime(endDate)}
-                        </button>
+            <div className="bg-card/20">
+                <button
+                    type="button"
+                    onClick={() => setExpandedSection(expandedSection === "end" ? null : "end")}
+                    className={cn(
+                        "w-full flex items-center justify-between px-4 py-3.5 transition-colors",
+                        expandedSection === "end" ? "bg-muted/50" : "hover:bg-muted/30"
                     )}
-                </div>
+                >
+                    <span className="text-[15px] font-medium text-foreground">종료</span>
+                    <span className={cn(
+                        "text-[15px] transition-colors",
+                        expandedSection === "end" ? "text-primary font-semibold" : "text-muted-foreground"
+                    )}>
+                        {formatDisplayDate(endDate || date, endTime || time)}
+                    </span>
+                </button>
 
-                {/* Inline Calendar for End */}
-                {expandedSection === "endDate" && (
-                    <div className="px-4 pb-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <button className="text-sm font-semibold text-red-400">
-                                {format(viewMonth, "yyyy년 M월", { locale: ko })}
-                            </button>
-                            <div className="flex gap-4">
-                                <button onClick={() => setViewMonth(subMonths(viewMonth, 1))} className="text-red-400 hover:text-red-300">
-                                    <ChevronLeft className="h-5 w-5" />
-                                </button>
-                                <button onClick={() => setViewMonth(addMonths(viewMonth, 1))} className="text-red-400 hover:text-red-300">
-                                    <ChevronRight className="h-5 w-5" />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground mb-2">
-                            {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-                                <div key={d} className="py-1">{d}</div>
-                            ))}
-                        </div>
-                        <div className="grid grid-cols-7 gap-1 text-center text-sm">
-                            {Array.from({ length: firstDay }).map((_, i) => (
-                                <div key={`empty-${i}`} />
-                            ))}
-                            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                                const isSelected = endDate.getDate() === day &&
-                                    endDate.getMonth() === viewMonth.getMonth() &&
-                                    endDate.getFullYear() === viewMonth.getFullYear();
-                                return (
-                                    <button
-                                        key={day}
-                                        onClick={() => handleDateSelect(day, false)}
-                                        className={cn(
-                                            "w-9 h-9 rounded-full flex items-center justify-center transition-colors",
-                                            isSelected && "bg-red-500 text-white",
-                                            !isSelected && "hover:bg-zinc-700/50"
-                                        )}
-                                    >
-                                        {day}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Inline Time Picker for End */}
-                {expandedSection === "endTime" && (
-                    <div className="px-4 pb-4">
-                        <div className="flex justify-center gap-2">
-                            {/* Period */}
-                            <div className="flex flex-col h-32 overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-                                {periods.map((p) => (
-                                    <button
-                                        key={p}
-                                        onClick={() => handleTimeChange(false, getHour12(endDate), endDate.getMinutes(), p)}
-                                        className={cn(
-                                            "px-4 py-2 text-sm snap-center",
-                                            getPeriod(endDate) === p ? "bg-zinc-600/80 rounded-lg font-semibold" : "text-muted-foreground"
-                                        )}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
-                            </div>
-                            {/* Hour */}
-                            <div className="flex flex-col h-32 overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-                                {hours.map((h) => (
-                                    <button
-                                        key={h}
-                                        onClick={() => handleTimeChange(false, h, endDate.getMinutes(), getPeriod(endDate))}
-                                        className={cn(
-                                            "px-4 py-2 text-sm snap-center",
-                                            getHour12(endDate) === h ? "bg-zinc-600/80 rounded-lg font-semibold" : "text-muted-foreground"
-                                        )}
-                                    >
-                                        {h}
-                                    </button>
-                                ))}
-                            </div>
-                            {/* Minute */}
-                            <div className="flex flex-col h-32 overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-                                {minutes.map((m) => (
-                                    <button
-                                        key={m}
-                                        onClick={() => handleTimeChange(false, getHour12(endDate), parseInt(m), getPeriod(endDate))}
-                                        className={cn(
-                                            "px-4 py-2 text-sm snap-center",
-                                            endDate.getMinutes() === parseInt(m) ? "bg-zinc-600/80 rounded-lg font-semibold" : "text-muted-foreground"
-                                        )}
-                                    >
-                                        {m}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {expandedSection === "end" && renderExpandedContent(false)}
             </div>
         </div>
     );

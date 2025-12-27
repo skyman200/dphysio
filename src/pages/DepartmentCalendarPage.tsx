@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEvents } from "@/hooks/useEvents";
-import { useAuth } from "@/contexts/AuthContext"; // Added import
+import { useAuth } from "@/contexts/AuthContext";
 import { useCalendarNavigation } from "@/hooks/useCalendarNavigation";
 import { useCalendarDrag } from "@/hooks/useCalendarDrag";
 import { useEventForm } from "@/hooks/useEventForm";
@@ -12,6 +12,8 @@ import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { AddEventDialog } from "@/components/calendar/AddEventDialog";
 import { EventDetailModal } from "@/components/calendar/EventDetailModal";
 import type { TransformedEvent } from "@/types";
+import { EventList } from "@/components/calendar/EventList";
+import { ViewType } from "@/components/calendar/CalendarViewToggle";
 
 const DepartmentCalendarPage = () => {
   const { events } = useEvents();
@@ -27,12 +29,22 @@ const DepartmentCalendarPage = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<TransformedEvent | null>(null);
 
+  // View Mode State
+  const [presentationMode, setPresentationMode] = useState<ViewType>("detailed");
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
   // Bulk Delete State
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
   const { deleteEvents } = useEvents();
   const { profile } = useAuth();
   const isChief = profile?.role === 'admin' || profile?.role === '학과장' || profile?.role === 'chief';
+
+  // Sync selectedDate with navigation.currentDate when Month changes?
+  // Or keep them independent? Usually syncing is nice.
+  useEffect(() => {
+    setSelectedDate(navigation.currentDate);
+  }, [navigation.currentDate]);
 
   // 이벤트 변환 및 필터링
   const transformedEvents = useMemo(() => {
@@ -54,6 +66,23 @@ const DepartmentCalendarPage = () => {
     });
   }, [transformedEvents, activeFilters, searchQuery]);
 
+  // Selected Date Events for List View
+  const selectedDateEvents = useMemo(() => {
+    return filteredEvents.filter(event => {
+      const start = new Date(event.start_date);
+      const end = new Date(event.end_date);
+      const target = selectedDate;
+
+      // Check overlap: target day vs [start, end]
+      // Normalize time
+      const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      const t = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+
+      return t >= s && t <= e;
+    });
+  }, [filteredEvents, selectedDate]);
+
   // 필터 토글
   const toggleFilter = (filterId: string) => {
     setActiveFilters((prev) =>
@@ -65,8 +94,14 @@ const DepartmentCalendarPage = () => {
 
   // 이벤트 핸들러
   const handleDayClick = (day: Date) => {
-    if (!drag.isDragging) {
-      eventForm.openDialogForDay(day);
+    // If in list mode, just select the date
+    if (presentationMode === 'list') {
+      setSelectedDate(day);
+    } else {
+      // In detailed mode, open dialog
+      if (!drag.isDragging) {
+        eventForm.openDialogForDay(day);
+      }
     }
   };
 
@@ -120,17 +155,19 @@ const DepartmentCalendarPage = () => {
 
   return (
     <MainLayout title="학과 캘린더">
-      <div className="space-y-6">
+      <div className="space-y-6 pb-20">
         {/* 헤더 */}
         <CalendarHeader
           dateRangeLabel={navigation.dateRangeLabel}
           viewMode={navigation.viewMode}
           searchQuery={searchQuery}
           activeFilters={activeFilters}
+          presentationMode={presentationMode}
           onPrev={navigation.navigatePrev}
           onNext={navigation.navigateNext}
           onToday={navigation.goToToday}
           onViewModeChange={navigation.setViewMode}
+          onPresentationModeChange={setPresentationMode}
           onSearchChange={setSearchQuery}
           onAddClick={() => eventForm.setIsDialogOpen(true)}
           onToggleFilter={toggleFilter}
@@ -160,49 +197,66 @@ const DepartmentCalendarPage = () => {
           </div>
         )}
 
-        {/* 캘린더 뷰 */}
-        {navigation.viewMode === "month" && (
-          <CalendarMonthView
-            currentDate={navigation.currentDate}
-            filteredEvents={filteredEvents}
-            isDragging={drag.isDragging}
-            isInDragRange={drag.isInDragRange}
-            onMouseDown={drag.handleMouseDown}
-            onMouseEnter={drag.handleMouseEnter}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={drag.resetDrag}
-            onDayClick={handleDayClick}
-            onEventClick={handleEventClick}
-            // Props for Selection (need to update CalendarMonthView to accept them)
-            // Passing as any for now until we update the component definition
-            isSelectMode={isSelectMode}
-            selectedEventIds={Array.from(selectedEventIds)}
-          />
-        )}
+        <div className="flex flex-col gap-6">
+          {/* 캘린더 뷰 */}
+          <div className={cn(
+            "transition-all duration-300",
+            presentationMode === "list" ? "h-[450px]" : "min-h-[600px]" // shrink calendar in list mode
+          )}>
+            {navigation.viewMode === "month" && (
+              <CalendarMonthView
+                currentDate={navigation.currentDate}
+                filteredEvents={filteredEvents}
+                isDragging={drag.isDragging}
+                isInDragRange={drag.isInDragRange}
+                onMouseDown={drag.handleMouseDown}
+                onMouseEnter={drag.handleMouseEnter}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={drag.resetDrag}
+                onDayClick={handleDayClick}
+                onEventClick={handleEventClick}
+                // Props for Selection
+                isSelectMode={isSelectMode}
+                selectedEventIds={Array.from(selectedEventIds)}
+              />
+            )}
 
-        {navigation.viewMode === "week" && (
-          <div className="glass-card rounded-2xl overflow-hidden h-[600px]">
-            <CalendarWeekView
-              date={navigation.currentDate}
-              events={filteredEvents}
-              onEventClick={(event) => handleEventClick(event as TransformedEvent)}
-              onSlotClick={(day, hour) => eventForm.openDialogForDay(day, hour)}
-              onDragCreate={handleDragCreate}
-            />
-          </div>
-        )}
+            {navigation.viewMode === "week" && (
+              <div className="glass-card rounded-2xl overflow-hidden h-full">
+                <CalendarWeekView
+                  date={navigation.currentDate}
+                  events={filteredEvents}
+                  onEventClick={(event) => handleEventClick(event as TransformedEvent)}
+                  onSlotClick={(day, hour) => eventForm.openDialogForDay(day, hour)}
+                  onDragCreate={handleDragCreate}
+                />
+              </div>
+            )}
 
-        {navigation.viewMode === "day" && (
-          <div className="glass-card rounded-2xl overflow-hidden h-[600px]">
-            <CalendarDayView
-              date={navigation.currentDate}
-              events={filteredEvents}
-              onEventClick={(event) => handleEventClick(event as TransformedEvent)}
-              onSlotClick={(day, hour) => eventForm.openDialogForDay(day, hour)}
-              onDragCreate={handleDragCreate}
-            />
+            {navigation.viewMode === "day" && (
+              <div className="glass-card rounded-2xl overflow-hidden h-full">
+                <CalendarDayView
+                  date={navigation.currentDate}
+                  events={filteredEvents}
+                  onEventClick={(event) => handleEventClick(event as TransformedEvent)}
+                  onSlotClick={(day, hour) => eventForm.openDialogForDay(day, hour)}
+                  onDragCreate={handleDragCreate}
+                />
+              </div>
+            )}
           </div>
-        )}
+
+          {/* List View (Only visible in 'list' mode) */}
+          {presentationMode === "list" && (
+            <div className="border-t border-border/40 pt-6">
+              <EventList
+                date={selectedDate}
+                events={selectedDateEvents}
+                onEventClick={handleEventClick}
+              />
+            </div>
+          )}
+        </div>
 
         {/* 일정 추가 다이얼로그 */}
         <AddEventDialog
