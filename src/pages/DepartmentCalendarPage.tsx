@@ -267,6 +267,8 @@ const DepartmentCalendarPage = () => {
           onUpdateField={eventForm.updateField}
           onSubmit={eventForm.handleSubmit}
           onCancel={eventForm.closeDialog}
+          isAllDay={eventForm.isAllDay}
+          onAllDayChange={eventForm.setIsAllDay}
         />
 
         {/* 이벤트 상세 모달 */}

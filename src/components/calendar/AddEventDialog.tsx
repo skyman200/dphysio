@@ -15,6 +15,8 @@ interface AddEventDialogProps {
     onUpdateField: <K extends keyof NewEventFormState>(field: K, value: NewEventFormState[K]) => void;
     onSubmit: () => void;
     onCancel: () => void;
+    isAllDay: boolean;
+    onAllDayChange: (checked: boolean) => void;
 }
 
 export function AddEventDialog({
@@ -24,22 +26,21 @@ export function AddEventDialog({
     onUpdateField,
     onSubmit,
     onCancel,
+    isAllDay,
+    onAllDayChange,
 }: AddEventDialogProps) {
-    const [isAllDay, setIsAllDay] = useState(false);
+    // Initial check removal or move to useEffect if needed, but likely handled by parent hook now
+    // logic inside useEventForm handles init state
 
-    // Initial check for all day if time is empty
-    useState(() => {
-        if (formState.date && !formState.time) {
-            setIsAllDay(true);
-        }
-    });
+
+
 
     const handleDateTimeUpdate = (field: "date" | "time" | "endDate" | "endTime", value: string) => {
         onUpdateField(field as any, value);
     };
 
     const handleAllDayChange = (checked: boolean) => {
-        setIsAllDay(checked);
+        onAllDayChange(checked);
         if (checked) {
             onUpdateField("time", "");
             onUpdateField("endTime", "");

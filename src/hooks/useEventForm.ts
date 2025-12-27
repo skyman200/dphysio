@@ -11,6 +11,7 @@ export function useEventForm() {
     const { user } = useAuth();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [formState, setFormState] = useState<NewEventFormState>(INITIAL_EVENT_FORM_STATE);
+    const [isAllDay, setIsAllDay] = useState(false);
 
     const updateField = useCallback(<K extends keyof NewEventFormState>(
         field: K,
@@ -27,6 +28,7 @@ export function useEventForm() {
             time: hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : "09:00",
             endTime: hour !== undefined ? `${(hour + 1).toString().padStart(2, "0")}:00` : "10:00",
         }));
+        setIsAllDay(false);
         setIsDialogOpen(true);
     }, []);
 
@@ -38,6 +40,7 @@ export function useEventForm() {
             time: "09:00",
             endTime: "18:00",
         }));
+        setIsAllDay(false);
         setIsDialogOpen(true);
     }, []);
 
@@ -49,11 +52,13 @@ export function useEventForm() {
             time: `${startHour.toString().padStart(2, "0")}:00`,
             endTime: `${endHour.toString().padStart(2, "0")}:00`,
         }));
+        setIsAllDay(false);
         setIsDialogOpen(true);
     }, []);
 
     const resetForm = useCallback(() => {
         setFormState(INITIAL_EVENT_FORM_STATE);
+        setIsAllDay(false);
     }, []);
 
     const closeDialog = useCallback(() => {
@@ -62,18 +67,35 @@ export function useEventForm() {
     }, [resetForm]);
 
     const handleSubmit = useCallback(async (): Promise<boolean> => {
-        if (!formState.title || !formState.date || !formState.time || !formState.category || !user) {
-            toast.error("필수 항목을 모두 입력해주세요 (카테고리 포함)");
+        const missingFields = [];
+        if (!formState.title) missingFields.push("제목");
+        if (!formState.date) missingFields.push("날짜");
+        if (!isAllDay && !formState.time) missingFields.push("시작 시간");
+        if (!formState.category) missingFields.push("카테고리");
+
+        if (missingFields.length > 0) {
+            toast.error(`다음 항목을 입력해주세요: ${missingFields.join(", ")}`);
             return false;
         }
 
-        const startDate = new Date(`${formState.date}T${formState.time}:00`);
+        const startDateTimeStr = isAllDay
+            ? `${formState.date}T00:00:00`
+            : `${formState.date}T${formState.time}:00`;
+        const startDate = new Date(startDateTimeStr);
 
         let endDate: Date | undefined;
-        if (formState.endDate && formState.endDate !== formState.date) {
-            endDate = new Date(`${formState.endDate}T${formState.endTime || "23:59"}:00`);
-        } else if (formState.endTime) {
-            endDate = new Date(`${formState.date}T${formState.endTime}:00`);
+        // Default end date logic
+        const endDateStr = (formState.endDate && formState.endDate !== formState.date)
+            ? formState.endDate
+            : formState.date;
+
+        const removeSeconds = (t: string) => t.length > 5 ? t.substring(0, 5) : t;
+
+        if (isAllDay) {
+            endDate = new Date(`${endDateStr}T23:59:59`);
+        } else {
+            const endTimeStr = formState.endTime ? removeSeconds(formState.endTime) : "23:59";
+            endDate = new Date(`${endDateStr}T${endTimeStr}:00`);
         }
 
         const { error } = await addEvent({
@@ -88,19 +110,21 @@ export function useEventForm() {
 
         if (error) {
             console.error("Event creation error:", error);
-            toast.error("일정 추가에 실패했습니다. 데이터베이스 설정을 확인해주세요.");
+            toast.error("일정 추가에 실패했습니다.");
             return false;
         }
 
         toast.success("일정이 추가되었습니다");
         closeDialog();
         return true;
-    }, [formState, user, addEvent, closeDialog]);
+    }, [formState, user, addEvent, closeDialog, isAllDay]);
 
     return {
         isDialogOpen,
         setIsDialogOpen,
         formState,
+        isAllDay,
+        setIsAllDay,
         updateField,
         openDialogForDay,
         openDialogForDrag,

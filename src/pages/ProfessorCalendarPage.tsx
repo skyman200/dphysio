@@ -188,6 +188,7 @@ const ProfessorCalendarPage = () => {
       end_date: new Date(endDateTimeStr),
       location: newEvent.location || undefined,
       category: newEvent.category,
+      type: "professor",
     });
 
     if (error) {
