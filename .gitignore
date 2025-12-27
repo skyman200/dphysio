@@ -44,3 +44,9 @@ electron-dist/
 
 # Tauri build output
 src-tauri/target/
+
+# Private keys
+*.key
+*.key.pub
+test_sign.*
+private_key_with_pass.key

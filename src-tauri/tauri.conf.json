@@ -1,19 +1,20 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
     "productName": "물리치료학과 대시보드",
-    "version": "1.1.3",
+    "version": "2.0.0",
     "identifier": "com.koreapt.dashboard",
     "build": {
-        "beforeDevCommand": "npm run dev",
-        "devUrl": "http://localhost:8080",
-        "beforeBuildCommand": "npm run build",
-        "frontendDist": "../dist"
+        "beforeDevCommand": "",
+        "devUrl": "https://physio-materials.web.app",
+        "beforeBuildCommand": "",
+        "frontendDist": "frontend-stub"
     },
     "app": {
         "withGlobalTauri": false,
         "windows": [
             {
                 "title": "물리치료학과 대시보드",
+                "url": "https://physio-materials.web.app",
                 "width": 1400,
                 "height": 900,
                 "minWidth": 800,
@@ -53,14 +54,6 @@
                 "displayLanguageSelector": false
             }
         },
-        "createUpdaterArtifacts": true
-    },
-    "plugins": {
-        "updater": {
-            "endpoints": [
-                "https://github.com/skyman200/dphysio/releases/latest/download/latest.json"
-            ],
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNDOEFBQTgyNUUwQzgxMjUKUldRbGdReGVncXFLUEMzZ0IxOGI1NXZRa2JqaUc0NlZKTWRhV1Fub2ZjOFc5MXVVbDA0U2tmU2cK"
-        }
+        "createUpdaterArtifacts": false
     }
 }
