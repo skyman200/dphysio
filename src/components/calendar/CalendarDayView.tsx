@@ -53,6 +53,9 @@ export function CalendarDayView({
 
   // 중앙화된 색상 함수 사용
   const getEventStyle = (event: Event) => {
+    if (event.type === 'professor') {
+      return getUserEventStyle(event.created_by);
+    }
     const typeStyle = getEventTypeStyle(event.type || "");
     if (typeStyle) return typeStyle;
     return getUserEventStyle(event.created_by);
@@ -118,7 +121,8 @@ export function CalendarDayView({
                   exit={{ opacity: 0, x: 10 }}
                   className={cn(
                     "absolute left-2 right-2 rounded-lg p-2 text-white cursor-pointer shadow-lg hover:scale-[1.02] transition-transform",
-                    getEventStyle(event)
+                    getEventStyle(event),
+                    event.type === 'professor' && "border-l-4 border-emerald-500/80 pl-3"
                   )}
                   style={{ top, height, minHeight: 30 }}
                   onClick={(e) => {

@@ -61,7 +61,15 @@ export function CalendarWeekView({
   };
 
   const getEventColorStyle = (event: Event) => {
-    // 1. Check for specific event type styling first (Department, Professor, etc.)
+    // 0. Special case for Professor events: Use User Color
+    if (event.type === 'professor') {
+      return {
+        backgroundColor: undefined,
+        className: getProfileColor(event.created_by)
+      };
+    }
+
+    // 1. Check for specific event type styling first
     const typeStyle = getEventTypeStyle(event.type || "");
     if (typeStyle) {
       return {
@@ -219,7 +227,8 @@ export function CalendarWeekView({
                           exit={{ opacity: 0, scale: 0.95 }}
                           className={cn(
                             "absolute left-0.5 right-0.5 rounded-md px-1.5 py-1 text-white cursor-pointer shadow-md hover:shadow-lg transition-shadow overflow-hidden",
-                            colorStyle.className
+                            colorStyle.className,
+                            event.type === 'professor' && "border-l-[3px] border-emerald-500/80 pl-2"
                           )}
                           style={{
                             top,
