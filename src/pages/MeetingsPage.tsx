@@ -39,6 +39,7 @@ const MeetingsPage = () => {
   const [newMeeting, setNewMeeting] = useState({
     title: "",
     date: "",
+    time: "14:00",
     location: "",
     description: "",
   });
@@ -79,9 +80,10 @@ const MeetingsPage = () => {
 
     if (editingId) {
       // UPDATE Existing
+      const dateTimeStr = `${newMeeting.date}T${newMeeting.time}`;
       const { error } = await updateEvent(editingId, {
         title: newMeeting.title,
-        start_date: new Date(newMeeting.date),
+        start_date: new Date(dateTimeStr),
         location: newMeeting.location || null,
         description: newMeeting.description || null,
       });
@@ -91,14 +93,15 @@ const MeetingsPage = () => {
       } else {
         toast({ title: "수정 완료", description: "회의가 수정되었습니다." });
         setDialogOpen(false);
-        setNewMeeting({ title: "", date: "", location: "", description: "" });
+        setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
         setEditingId(null);
       }
     } else {
       // CREATE New
+      const dateTimeStr = `${newMeeting.date}T${newMeeting.time}`;
       const { error } = await addEvent({
         title: newMeeting.title,
-        start_date: new Date(newMeeting.date),
+        start_date: new Date(dateTimeStr),
         location: newMeeting.location || undefined,
         description: newMeeting.description || undefined,
         category: "meeting",
@@ -116,7 +119,7 @@ const MeetingsPage = () => {
           title: "회의 추가됨",
           description: "새로운 회의가 추가되었습니다.",
         });
-        setNewMeeting({ title: "", date: "", location: "", description: "" });
+        setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
         setDialogOpen(false);
       }
     }
@@ -238,16 +241,16 @@ const MeetingsPage = () => {
                               className="h-7 w-7 p-0"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // TODO: Open Edit Dialog or reusing Add Dialog with data
+                                const meetingDate = parseISO(meeting.start_date);
                                 setNewMeeting({
                                   title: meeting.title,
-                                  date: format(parseISO(meeting.start_date), "yyyy-MM-dd'T'HH:mm"),
+                                  date: format(meetingDate, "yyyy-MM-dd"),
+                                  time: format(meetingDate, "HH:mm"),
                                   location: meeting.location || "",
                                   description: meeting.description || ""
                                 });
+                                setEditingId(meeting.id);
                                 setDialogOpen(true);
-                                // We need to handle "Update" vs "Add" in dialog. 
-                                // For now, let's keep it simple: Delete works, Edit needs mode.
                               }}
                             >
                               <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
@@ -283,12 +286,18 @@ const MeetingsPage = () => {
       </div>
 
       {/* Add Meeting Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) {
+          setEditingId(null);
+          setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
+        }
+      }}>
         <DialogContent className="glass rounded-2xl border-0 sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
-              새 회의 추가
+              {editingId ? "회의 수정" : "새 회의 추가"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
@@ -302,13 +311,33 @@ const MeetingsPage = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label>날짜 및 시간</Label>
+              <Label>날짜</Label>
               <Input
-                type="datetime-local"
+                type="date"
                 value={newMeeting.date}
                 onChange={(e) => setNewMeeting({ ...newMeeting, date: e.target.value })}
                 className="rounded-xl bg-muted/30 border-0"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>시간</Label>
+              <select
+                value={newMeeting.time}
+                onChange={(e) => setNewMeeting({ ...newMeeting, time: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl bg-muted/30 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {Array.from({ length: 24 }, (_, hour) =>
+                  ["00", "30"].map((min) => {
+                    const timeValue = `${hour.toString().padStart(2, "0")}:${min}`;
+                    const displayTime = `${hour > 12 ? "오후" : hour === 12 ? "오후" : "오전"} ${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${min}`;
+                    return (
+                      <option key={timeValue} value={timeValue}>
+                        {displayTime}
+                      </option>
+                    );
+                  })
+                )}
+              </select>
             </div>
             <div className="space-y-2">
               <Label>장소 (선택)</Label>
@@ -333,7 +362,7 @@ const MeetingsPage = () => {
                 취소
               </Button>
               <Button onClick={handleAddMeeting} disabled={loading}>
-                {loading ? "추가 중..." : "추가"}
+                {loading ? (editingId ? "수정 중..." : "추가 중...") : (editingId ? "수정" : "추가")}
               </Button>
             </div>
           </div>
