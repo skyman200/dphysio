@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { MeetingForm } from "@/components/meetings/MeetingForm";
 
 const PROFESSOR_COLORS = [
   "from-professor-terracotta to-professor-terracotta/80",
@@ -293,79 +294,21 @@ const MeetingsPage = () => {
           setNewMeeting({ title: "", date: "", time: "14:00", location: "", description: "" });
         }
       }}>
-        <DialogContent className="glass rounded-2xl border-0 sm:max-w-md">
+        <DialogContent className="glass rounded-2xl border-0 sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
               {editingId ? "회의 수정" : "새 회의 추가"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>회의 제목</Label>
-              <Input
-                placeholder="예: 교수회의, 학과위원회"
-                value={newMeeting.title}
-                onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })}
-                className="rounded-xl bg-muted/30 border-0"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>날짜</Label>
-              <Input
-                type="date"
-                value={newMeeting.date}
-                onChange={(e) => setNewMeeting({ ...newMeeting, date: e.target.value })}
-                className="rounded-xl bg-muted/30 border-0"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>시간</Label>
-              <select
-                value={newMeeting.time}
-                onChange={(e) => setNewMeeting({ ...newMeeting, time: e.target.value })}
-                className="w-full h-10 px-3 rounded-xl bg-muted/30 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {Array.from({ length: 24 }, (_, hour) =>
-                  ["00", "30"].map((min) => {
-                    const timeValue = `${hour.toString().padStart(2, "0")}:${min}`;
-                    const displayTime = `${hour > 12 ? "오후" : hour === 12 ? "오후" : "오전"} ${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${min}`;
-                    return (
-                      <option key={timeValue} value={timeValue}>
-                        {displayTime}
-                      </option>
-                    );
-                  })
-                )}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label>장소 (선택)</Label>
-              <Input
-                placeholder="예: 회의실 301"
-                value={newMeeting.location}
-                onChange={(e) => setNewMeeting({ ...newMeeting, location: e.target.value })}
-                className="rounded-xl bg-muted/30 border-0"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>설명 (선택)</Label>
-              <Input
-                placeholder="회의 안건..."
-                value={newMeeting.description}
-                onChange={(e) => setNewMeeting({ ...newMeeting, description: e.target.value })}
-                className="rounded-xl bg-muted/30 border-0"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-                취소
-              </Button>
-              <Button onClick={handleAddMeeting} disabled={loading}>
-                {loading ? (editingId ? "수정 중..." : "추가 중...") : (editingId ? "수정" : "추가")}
-              </Button>
-            </div>
-          </div>
+          <MeetingForm
+            meeting={newMeeting}
+            setMeeting={setNewMeeting}
+            onSubmit={handleAddMeeting}
+            onCancel={() => setDialogOpen(false)}
+            loading={loading}
+            editingId={editingId}
+          />
         </DialogContent>
       </Dialog>
     </MainLayout>
